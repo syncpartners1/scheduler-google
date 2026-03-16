@@ -1,7 +1,7 @@
 import { useMemo } from 'react'
 import { ChevronLeft, Clock, Loader2, AlertCircle } from 'lucide-react'
 import { generateAvailableSlots, formatDateTimeInTz } from '../utils/timeSlots.js'
-import { SLOT_DURATIONS } from '../config.js'
+import { MEETING_TYPES } from '../config.js'
 
 const MONTHS = [
   'January','February','March','April','May','June',
@@ -14,16 +14,16 @@ export default function TimeSlotPicker({
   loading,
   error,
   userTz,
-  duration,
-  onDurationChange,
+  meetingType,
+  onMeetingTypeChange,
   onSelect,
   onBack,
 }) {
   const slots = useMemo(
     () => loading || error
       ? []
-      : generateAvailableSlots(selectedDate, busySlots, userTz, duration),
-    [selectedDate, busySlots, loading, error, userTz, duration]
+      : generateAvailableSlots(selectedDate, busySlots, userTz, meetingType.duration),
+    [selectedDate, busySlots, loading, error, userTz, meetingType.duration]
   )
 
   const dateLabel = selectedDate
@@ -45,26 +45,31 @@ export default function TimeSlotPicker({
       </div>
       <p className="text-sm text-gray-400 mb-5 ml-8">{dateLabel}</p>
 
-      {/* Duration toggle */}
+      {/* Meeting type selector */}
       <div className="mb-5">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Duration</p>
-        <div className="flex gap-2">
-          {SLOT_DURATIONS.map(d => (
-            <button
-              key={d}
-              onClick={() => onDurationChange(d)}
-              className={`
-                flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-medium border transition
-                ${duration === d
-                  ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
-                  : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300 hover:text-brand-600'
-                }
-              `}
-            >
-              <Clock className="w-3.5 h-3.5" />
-              {d} min
-            </button>
-          ))}
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Meeting Type</p>
+        <div className="space-y-1.5">
+          {MEETING_TYPES.map(mt => {
+            const active = meetingType.id === mt.id
+            return (
+              <button
+                key={mt.id}
+                onClick={() => onMeetingTypeChange(mt)}
+                className={`
+                  w-full flex items-center justify-between px-4 py-2.5 rounded-xl border text-sm transition text-left
+                  ${active
+                    ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
+                    : 'bg-white text-gray-700 border-gray-200 hover:border-brand-300 hover:text-brand-600'
+                  }
+                `}
+              >
+                <span className="font-medium">{mt.label}</span>
+                <span className={`text-xs ${active ? 'text-brand-100' : 'text-gray-400'}`}>
+                  {mt.duration} min · {mt.subtitle}
+                </span>
+              </button>
+            )
+          })}
         </div>
       </div>
 
@@ -87,7 +92,7 @@ export default function TimeSlotPicker({
         <div className="text-center py-14 text-gray-400">
           <Clock className="w-8 h-8 mx-auto mb-3 opacity-40" />
           <p className="text-sm font-medium">No available slots</p>
-          <p className="text-xs mt-1">Try a different date or duration</p>
+          <p className="text-xs mt-1">Try a different date or meeting type</p>
         </div>
       )}
 

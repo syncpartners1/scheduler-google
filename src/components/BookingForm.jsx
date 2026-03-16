@@ -1,22 +1,36 @@
 import { useState } from 'react'
-import { ChevronLeft, Loader2, User, Mail, MessageSquare, AlertCircle } from 'lucide-react'
+import { ChevronLeft, Loader2, User, Mail, MessageSquare, Video, Globe2, MapPin, AlertCircle } from 'lucide-react'
 import { formatDateTimeInTz } from '../utils/timeSlots.js'
 import { OWNER_TZ } from '../config.js'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, onBack }) {
-  const [form,       setForm]       = useState({ name: '', email: '', subject: '' })
+const LOCATION_MODES = [
+  { id: 'virtual',   label: 'Virtual',   icon: Video,   desc: 'Google Meet link' },
+  { id: 'hybrid',    label: 'Hybrid',    icon: Globe2,  desc: 'In-person + Meet link' },
+  { id: 'in_person', label: 'In-Person', icon: MapPin,  desc: 'Provide an address' },
+]
+
+export default function BookingForm({ selectedSlot, meetingType, userTz, onSubmit, onBack }) {
+  const [form, setForm] = useState({
+    name:            '',
+    email:           '',
+    subject:         '',
+    locationMode:    meetingType.defaultMode,
+    meetingLocation: '',
+  })
   const [errors,     setErrors]     = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [apiError,   setApiError]   = useState(null)
 
   const validate = () => {
     const e = {}
-    if (!form.name.trim())               e.name    = 'Name is required'
-    if (!form.email.trim())              e.email   = 'Email is required'
-    else if (!EMAIL_RE.test(form.email)) e.email   = 'Enter a valid email address'
-    if (!form.subject.trim())            e.subject = 'Meeting subject is required'
+    if (!form.name.trim())    e.name    = 'Name is required'
+    if (!form.email.trim())   e.email   = 'Email is required'
+    else if (!EMAIL_RE.test(form.email)) e.email = 'Enter a valid email address'
+    if (!form.subject.trim()) e.subject = 'Meeting subject is required'
+    if (form.locationMode === 'in_person' && !form.meetingLocation.trim())
+      e.meetingLocation = 'Meeting address is required for in-person meetings'
     setErrors(e)
     return Object.keys(e).length === 0
   }
@@ -24,6 +38,11 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
   const handleChange = (field) => (e) => {
     setForm(prev => ({ ...prev, [field]: e.target.value }))
     if (errors[field]) setErrors(prev => ({ ...prev, [field]: undefined }))
+  }
+
+  const handleLocationMode = (mode) => {
+    setForm(prev => ({ ...prev, locationMode: mode, meetingLocation: '' }))
+    setErrors(prev => ({ ...prev, meetingLocation: undefined }))
   }
 
   const handleSubmit = async (e) => {
@@ -40,13 +59,8 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
     }
   }
 
-  const slotLabel = selectedSlot
-    ? formatDateTimeInTz(selectedSlot.start, userTz)
-    : ''
-
-  const ownerLabel = selectedSlot
-    ? formatDateTimeInTz(selectedSlot.start, OWNER_TZ)
-    : ''
+  const slotLabel  = selectedSlot ? formatDateTimeInTz(selectedSlot.start, userTz)   : ''
+  const ownerLabel = selectedSlot ? formatDateTimeInTz(selectedSlot.start, OWNER_TZ) : ''
 
   return (
     <div className="p-6">
@@ -62,9 +76,10 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
         <h2 className="text-lg font-semibold text-gray-800">Your Details</h2>
       </div>
 
-      {/* Selected slot summary */}
+      {/* Selected slot + meeting type summary */}
       <div className="ml-8 mb-5 p-3 bg-brand-50 rounded-xl border border-brand-100">
-        <p className="text-sm font-medium text-brand-800">{slotLabel} · {duration} min</p>
+        <p className="text-sm font-medium text-brand-800">{slotLabel} · {meetingType.duration} min</p>
+        <p className="text-xs text-brand-600 mt-0.5">{meetingType.label}</p>
         {ownerLabel !== slotLabel && (
           <p className="text-xs text-brand-500 mt-0.5">Israel time: {ownerLabel}</p>
         )}
@@ -81,9 +96,7 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
       <form onSubmit={handleSubmit} noValidate className="space-y-4">
         {/* Name */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Full Name
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Full Name</label>
           <div className="relative">
             <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -94,11 +107,7 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
               disabled={submitting}
               className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm transition
                 focus:outline-none focus:ring-2 focus:ring-brand-300
-                ${errors.name
-                  ? 'border-red-300 bg-red-50 focus:ring-red-200'
-                  : 'border-gray-200 focus:border-brand-400'
-                }
-              `}
+                ${errors.name ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-gray-200 focus:border-brand-400'}`}
             />
           </div>
           {errors.name && <p className="text-xs text-red-500 mt-1">{errors.name}</p>}
@@ -106,9 +115,7 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
 
         {/* Email */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Email Address
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Email Address</label>
           <div className="relative">
             <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
             <input
@@ -119,11 +126,7 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
               disabled={submitting}
               className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm transition
                 focus:outline-none focus:ring-2 focus:ring-brand-300
-                ${errors.email
-                  ? 'border-red-300 bg-red-50 focus:ring-red-200'
-                  : 'border-gray-200 focus:border-brand-400'
-                }
-              `}
+                ${errors.email ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-gray-200 focus:border-brand-400'}`}
             />
           </div>
           {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
@@ -131,9 +134,7 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
 
         {/* Subject */}
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Meeting Subject
-          </label>
+          <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Subject</label>
           <div className="relative">
             <MessageSquare className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
             <textarea
@@ -144,15 +145,66 @@ export default function BookingForm({ selectedSlot, duration, userTz, onSubmit, 
               disabled={submitting}
               className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm transition resize-none
                 focus:outline-none focus:ring-2 focus:ring-brand-300
-                ${errors.subject
-                  ? 'border-red-300 bg-red-50 focus:ring-red-200'
-                  : 'border-gray-200 focus:border-brand-400'
-                }
-              `}
+                ${errors.subject ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-gray-200 focus:border-brand-400'}`}
             />
           </div>
           {errors.subject && <p className="text-xs text-red-500 mt-1">{errors.subject}</p>}
         </div>
+
+        {/* Location mode */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">Meeting Format</label>
+          <div className="grid grid-cols-3 gap-2">
+            {LOCATION_MODES.map(({ id, label, icon: Icon, desc }) => {
+              const active = form.locationMode === id
+              return (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => handleLocationMode(id)}
+                  disabled={submitting}
+                  className={`flex flex-col items-center gap-1 py-3 px-2 rounded-xl border text-sm transition
+                    ${active
+                      ? 'bg-brand-600 text-white border-brand-600 shadow-sm'
+                      : 'bg-white text-gray-600 border-gray-200 hover:border-brand-300 hover:text-brand-600'
+                    }`}
+                >
+                  <Icon className="w-4 h-4" />
+                  <span className="font-medium text-xs">{label}</span>
+                  <span className={`text-xs leading-tight text-center ${active ? 'text-brand-100' : 'text-gray-400'}`}>
+                    {desc}
+                  </span>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Address — shown only for in-person */}
+        {form.locationMode === 'in_person' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Meeting Address</label>
+            <div className="relative">
+              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                value={form.meetingLocation}
+                onChange={handleChange('meetingLocation')}
+                placeholder="123 Main St, Tel Aviv"
+                disabled={submitting}
+                className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm transition
+                  focus:outline-none focus:ring-2 focus:ring-brand-300
+                  ${errors.meetingLocation
+                    ? 'border-red-300 bg-red-50 focus:ring-red-200'
+                    : 'border-gray-200 focus:border-brand-400'
+                  }`}
+              />
+            </div>
+            {errors.meetingLocation && (
+              <p className="text-xs text-red-500 mt-1">{errors.meetingLocation}</p>
+            )}
+          </div>
+        )}
 
         {/* Submit */}
         <button

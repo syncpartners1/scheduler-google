@@ -4,7 +4,7 @@ import CalendarPicker     from './components/CalendarPicker.jsx'
 import TimeSlotPicker     from './components/TimeSlotPicker.jsx'
 import BookingForm        from './components/BookingForm.jsx'
 import ConfirmationScreen from './components/ConfirmationScreen.jsx'
-import { GAS_URL, OWNER_NAME } from './config.js'
+import { GAS_URL, OWNER_NAME, DEFAULT_MEETING_TYPE } from './config.js'
 import { saveBooking }    from './supabaseClient.js'
 
 // Detect if we are embedded as an iframe (Wix or other)
@@ -14,25 +14,25 @@ const IS_EMBED = window.self !== window.top ||
 /**
  * App steps:
  *  'calendar'  → pick a date
- *  'slots'     → pick a time slot
- *  'form'      → enter name / email / subject
+ *  'slots'     → pick a meeting type + time slot
+ *  'form'      → enter name / email / subject / location
  *  'confirm'   → success screen
  */
 export default function App() {
-  const [step,         setStep]         = useState('calendar')
-  const [selectedDate, setSelectedDate] = useState(null)   // JS Date
-  const [busySlots,    setBusySlots]    = useState([])      // [{start,end} ISO strings]
-  const [slotsLoading, setSlotsLoading] = useState(false)
-  const [slotsError,   setSlotsError]   = useState(null)
-  const [selectedSlot, setSelectedSlot] = useState(null)   // {start,end} ISO strings
-  const [duration,     setDuration]     = useState(30)      // 30 | 60
-  const [booking,      setBooking]      = useState(null)    // confirmed booking details
-  const [userTz]                        = useState(
+  const [step,          setStep]          = useState('calendar')
+  const [selectedDate,  setSelectedDate]  = useState(null)   // JS Date
+  const [busySlots,     setBusySlots]     = useState([])      // [{start,end} ISO strings]
+  const [slotsLoading,  setSlotsLoading]  = useState(false)
+  const [slotsError,    setSlotsError]    = useState(null)
+  const [selectedSlot,  setSelectedSlot]  = useState(null)   // {start,end} ISO strings
+  const [meetingType,   setMeetingType]   = useState(DEFAULT_MEETING_TYPE)
+  const [booking,       setBooking]       = useState(null)    // confirmed booking details
+  const [userTz]                          = useState(
     () => Intl.DateTimeFormat().resolvedOptions().timeZone
   )
 
-  // Fetch busy slots from GAS whenever the selected date changes
-  const fetchBusySlots = useCallback(async (date) => {
+  // Fetch busy slots from GAS whenever the selected date or meeting type changes
+  const fetchBusySlots = useCallback(async (date, mt) => {
     if (!date) return
     setSlotsLoading(true)
     setSlotsError(null)
@@ -46,7 +46,7 @@ export default function App() {
       action:   'getBusySlots',
       date:     dateStr,
       tz:       userTz,
-      duration: String(duration),
+      duration: String(mt.duration),
     })
 
     try {
@@ -60,22 +60,26 @@ export default function App() {
     } finally {
       setSlotsLoading(false)
     }
-  }, [userTz, duration])
+  }, [userTz])
 
   useEffect(() => {
-    if (selectedDate) fetchBusySlots(selectedDate)
-  }, [selectedDate, fetchBusySlots])
+    if (selectedDate) fetchBusySlots(selectedDate, meetingType)
+  }, [selectedDate, meetingType, fetchBusySlots])
 
   // Called by BookingForm after the user submits
   const handleBooking = useCallback(async (formData) => {
-    const { name, email, subject } = formData
+    const { name, email, subject, locationMode, meetingLocation } = formData
     const requestId = `${email}-${selectedSlot.start}-${Date.now()}`
 
     const body = {
-      action:    'createEvent',
+      action:           'createEvent',
       name, email, subject,
-      startISO:  selectedSlot.start,
-      duration,
+      startISO:         selectedSlot.start,
+      duration:         meetingType.duration,
+      meetingTypeId:    meetingType.id,
+      meetingTypeLabel: meetingType.label,
+      locationMode,
+      location:         meetingLocation || '',
       userTz,
       requestId,
     }
@@ -89,11 +93,16 @@ export default function App() {
     if (!data.ok) throw new Error(data.error || 'Booking failed')
 
     const confirmed = {
-      name, email, subject, duration, userTz,
-      startISO: data.startISO,
-      endISO:   data.endISO,
-      meetLink: data.meetLink,
-      eventId:  data.eventId,
+      name, email, subject,
+      duration:         meetingType.duration,
+      meetingTypeLabel: meetingType.label,
+      locationMode,
+      meetingLocation:  meetingLocation || '',
+      userTz,
+      startISO:  data.startISO,
+      endISO:    data.endISO,
+      meetLink:  data.meetLink,
+      eventId:   data.eventId,
     }
 
     // Persist to Supabase (non-blocking)
@@ -106,12 +115,18 @@ export default function App() {
 
     setBooking(confirmed)
     setStep('confirm')
-  }, [selectedSlot, duration, userTz])
+  }, [selectedSlot, meetingType, userTz])
 
   const handleDateSelect = (date) => {
     setSelectedDate(date)
     setSelectedSlot(null)
     setStep('slots')
+  }
+
+  const handleMeetingTypeChange = (mt) => {
+    setMeetingType(mt)
+    setBusySlots([])
+    fetchBusySlots(selectedDate, mt)
   }
 
   const handleSlotSelect = (slot) => {
@@ -125,6 +140,7 @@ export default function App() {
     setSelectedSlot(null)
     setBusySlots([])
     setBooking(null)
+    setMeetingType(DEFAULT_MEETING_TYPE)
   }
 
   return (
@@ -159,8 +175,8 @@ export default function App() {
               loading={slotsLoading}
               error={slotsError}
               userTz={userTz}
-              duration={duration}
-              onDurationChange={(d) => { setDuration(d); setBusySlots([]); fetchBusySlots(selectedDate) }}
+              meetingType={meetingType}
+              onMeetingTypeChange={handleMeetingTypeChange}
               onSelect={handleSlotSelect}
               onBack={() => setStep('calendar')}
             />
@@ -169,7 +185,7 @@ export default function App() {
           {step === 'form' && (
             <BookingForm
               selectedSlot={selectedSlot}
-              duration={duration}
+              meetingType={meetingType}
               userTz={userTz}
               onSubmit={handleBooking}
               onBack={() => setStep('slots')}

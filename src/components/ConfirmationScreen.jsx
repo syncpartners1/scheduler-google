@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { CheckCircle2, Video, Calendar, Copy, Check, RotateCcw } from 'lucide-react'
+import { CheckCircle2, Video, Calendar, Copy, Check, RotateCcw, MapPin, Globe2 } from 'lucide-react'
 import { formatDateTimeInTz } from '../utils/timeSlots.js'
 import { buildIcsDataUri, tzAbbr } from '../utils/timezone.js'
 import { OWNER_TZ } from '../config.js'
@@ -9,13 +9,18 @@ export default function ConfirmationScreen({ booking, userTz, onReset }) {
 
   if (!booking) return null
 
-  const { name, email, subject, startISO, endISO, meetLink, duration } = booking
+  const {
+    name, email, subject, startISO, endISO, meetLink, duration,
+    meetingTypeLabel, locationMode, meetingLocation,
+  } = booking
 
   const userLabel  = formatDateTimeInTz(startISO, userTz)
   const ownerLabel = formatDateTimeInTz(startISO, OWNER_TZ)
   const userTzAbbr = tzAbbr(userTz)
 
   const icsUri = buildIcsDataUri(booking)
+  const isInPerson = locationMode === 'in_person'
+  const hasMeetLink = !!meetLink && !isInPerson
 
   const copyMeetLink = async () => {
     try {
@@ -23,10 +28,15 @@ export default function ConfirmationScreen({ booking, userTz, onReset }) {
       setCopied(true)
       setTimeout(() => setCopied(false), 2000)
     } catch {
-      // Fallback for browsers without clipboard API
       window.prompt('Copy this link:', meetLink)
     }
   }
+
+  const locationModeLabel = {
+    virtual:   '🎥 Virtual',
+    hybrid:    '🔀 Hybrid (In-person + Online)',
+    in_person: '📍 In-Person',
+  }[locationMode] || ''
 
   return (
     <div className="p-6 text-center">
@@ -46,6 +56,12 @@ export default function ConfirmationScreen({ booking, userTz, onReset }) {
           <span className="font-medium text-gray-800">{subject}</span>
         </Detail>
 
+        {meetingTypeLabel && (
+          <Detail label="Type">
+            <span className="text-gray-800">{meetingTypeLabel}</span>
+          </Detail>
+        )}
+
         <Detail label={`Your time (${userTzAbbr})`}>
           <span className="text-gray-800">{userLabel} · {duration} min</span>
         </Detail>
@@ -56,6 +72,16 @@ export default function ConfirmationScreen({ booking, userTz, onReset }) {
           </Detail>
         )}
 
+        <Detail label="Format">
+          <span className="text-gray-800">{locationModeLabel}</span>
+        </Detail>
+
+        {isInPerson && meetingLocation && (
+          <Detail label="Address">
+            <span className="text-gray-800">{meetingLocation}</span>
+          </Detail>
+        )}
+
         <Detail label="With">
           <span className="text-gray-800">{name}</span>
         </Detail>
@@ -63,32 +89,52 @@ export default function ConfirmationScreen({ booking, userTz, onReset }) {
 
       {/* Action buttons */}
       <div className="space-y-3">
-        {/* Google Meet link */}
-        <a
-          href={meetLink}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
-                     bg-brand-600 text-white font-semibold text-sm
-                     hover:bg-brand-700 transition shadow-sm"
-        >
-          <Video className="w-4 h-4" />
-          Join Google Meet
-        </a>
 
-        {/* Copy meet link */}
-        <button
-          onClick={copyMeetLink}
-          className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
-                     border border-gray-200 text-gray-700 font-medium text-sm
-                     hover:bg-gray-50 transition"
-        >
-          {copied ? (
-            <><Check className="w-4 h-4 text-green-500" /> Copied!</>
-          ) : (
-            <><Copy className="w-4 h-4" /> Copy Meet Link</>
-          )}
-        </button>
+        {/* In-person: show address prominently */}
+        {isInPerson && meetingLocation && (
+          <div className="flex items-center gap-2 w-full py-3 px-4 rounded-xl
+                          bg-amber-50 border border-amber-200 text-sm text-amber-800">
+            <MapPin className="w-4 h-4 flex-shrink-0 text-amber-600" />
+            <span className="font-medium">{meetingLocation}</span>
+          </div>
+        )}
+
+        {/* Virtual / Hybrid: Google Meet link as primary CTA */}
+        {hasMeetLink && (
+          <>
+            <a
+              href={meetLink}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
+                         bg-brand-600 text-white font-semibold text-sm
+                         hover:bg-brand-700 transition shadow-sm"
+            >
+              <Video className="w-4 h-4" />
+              Join Google Meet
+            </a>
+
+            <button
+              onClick={copyMeetLink}
+              className="flex items-center justify-center gap-2 w-full py-3 rounded-xl
+                         border border-gray-200 text-gray-700 font-medium text-sm
+                         hover:bg-gray-50 transition"
+            >
+              {copied ? (
+                <><Check className="w-4 h-4 text-green-500" /> Copied!</>
+              ) : (
+                <><Copy className="w-4 h-4" /> Copy Meet Link</>
+              )}
+            </button>
+          </>
+        )}
+
+        {/* Hybrid: also show the Meet link even with an address */}
+        {locationMode === 'hybrid' && meetLink && (
+          <p className="text-xs text-gray-400">
+            Can't make it in person? Join online via the Meet link above.
+          </p>
+        )}
 
         {/* Add to calendar (.ics) */}
         <a
