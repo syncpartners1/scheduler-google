@@ -25,7 +25,7 @@ const PORT      = process.env.PORT || 3000
 const GAS_URL   =
   process.env.GAS_URL ||
   process.env.VITE_GAS_URL ||
-  'https://script.google.com/macros/s/AKfycbxIt5jVoSmstOxBh2Ojej3hwSNPHxuWc-gu6CT5-A5iwJEO_8bJYFxg269UJaa0mt09/exec'
+  'https://script.google.com/macros/s/AKfycbxVe7r1QIZus4kwPlWk5T6ntKO8ebAtouz6dQzRuVgVd1bhbQMX5ZbQteJIORhv0LLB/exec'
 const API_KEY   = process.env.API_KEY || ''
 
 // ── Slot generation (mirrors src/utils/timeSlots.js) ────────────────────────

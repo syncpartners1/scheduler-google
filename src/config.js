@@ -12,7 +12,7 @@
 // The fallback below is the deployed Google Apps Script Web App.
 export const GAS_URL =
   import.meta.env.VITE_GAS_URL ||
-  'https://script.google.com/macros/s/AKfycbxIt5jVoSmstOxBh2Ojej3hwSNPHxuWc-gu6CT5-A5iwJEO_8bJYFxg269UJaa0mt09/exec'
+  'https://script.google.com/macros/s/AKfycbxVe7r1QIZus4kwPlWk5T6ntKO8ebAtouz6dQzRuVgVd1bhbQMX5ZbQteJIORhv0LLB/exec'
 
 // ── Owner / Calendar settings ────────────────────────────────────────────────
 export const OWNER_NAME = import.meta.env.VITE_OWNER_NAME || 'Sync Partners'
