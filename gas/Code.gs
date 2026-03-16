@@ -111,6 +111,8 @@ function handleRequest(e, body) {
         return jsonResponse(cancelEvent(body))
       case 'getBookings':
         return jsonResponse(getBookings(e.parameter))
+      case 'getAllBookings':
+        return jsonResponse(getAllBookings(e.parameter))
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400)
     }
@@ -183,25 +185,39 @@ function getBusySlots(params) {
  * Create a Google Calendar event with a Google Meet link.
  *
  * Body params:
- *   name       – attendee's full name
- *   email      – attendee's email (receives calendar invite)
- *   subject    – meeting title / description
- *   startISO   – UTC ISO string for meeting start
- *   duration   – meeting length in minutes (30 | 60)
- *   userTz     – attendee's IANA timezone (stored in event description)
- *   requestId  – idempotency key (prevents duplicate events on retry)
+ *   name            – attendee's full name
+ *   email           – attendee's email (receives calendar invite)
+ *   subject         – meeting title / description
+ *   startISO        – UTC ISO string for meeting start
+ *   duration        – meeting length in minutes (30 | 60)
+ *   userTz          – attendee's IANA timezone (stored in event description)
+ *   requestId       – idempotency key (prevents duplicate events on retry)
+ *   meetingTypeId   – e.g. 'intro_30', 'coaching_60' (optional, for logging)
+ *   meetingTypeLabel – e.g. '30 min · Introduction' (optional, for display)
+ *   locationMode    – 'virtual' | 'hybrid' | 'in_person' (default: 'virtual')
+ *   location        – physical address (required when locationMode = 'in_person')
  *
  * Response (success):
  *   { ok: true, eventId, meetLink, startISO, endISO }
+ *   meetLink is null for in_person meetings.
  *
  * Response (error):
  *   { ok: false, error: '...' }
  */
 function createEvent(body) {
-  const { name, email, subject, startISO, duration, userTz, requestId } = body
+  const {
+    name, email, subject, startISO, duration, userTz, requestId,
+    meetingTypeId, meetingTypeLabel,
+    locationMode = 'virtual',
+    location: meetingLocation = '',
+  } = body
 
   if (!name || !email || !startISO || !duration) {
     throw new Error('Missing required fields: name, email, startISO, duration')
+  }
+
+  if (locationMode === 'in_person' && !meetingLocation.trim()) {
+    return { ok: false, error: 'Meeting address is required for in-person meetings.' }
   }
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -244,27 +260,29 @@ function createEvent(body) {
     return { ok: false, error: 'Time slot is no longer available. Please pick another.' }
   }
 
+  // ── Build event description ───────────────────────────────
+  const isInPerson = locationMode === 'in_person'
+  const descLines = [
+    `Booked via Scheduling App`,
+    meetingTypeLabel ? `Type: ${meetingTypeLabel}` : '',
+    `Mode: ${locationMode}`,
+    `Attendee: ${name} <${email}>`,
+    `Timezone: ${userTz || 'UTC'}`,
+    isInPerson && meetingLocation ? `Address: ${meetingLocation}` : '',
+    requestId ? `RequestId: ${requestId}` : '',
+  ]
+
   // ── Create the event via Advanced Calendar Service ────────
-  // conferenceDataVersion:1 triggers automatic Google Meet link generation
+  // conferenceDataVersion:1 triggers automatic Google Meet link generation.
+  // For in-person meetings we skip Meet and set the physical location instead.
   const eventResource = {
     summary:     subject || `Meeting with ${name}`,
-    description: [
-      `Booked via Scheduling App`,
-      `Attendee: ${name} <${email}>`,
-      `Timezone: ${userTz || 'UTC'}`,
-      requestId ? `RequestId: ${requestId}` : '',
-    ].filter(Boolean).join('\n'),
+    description: descLines.filter(Boolean).join('\n'),
     start:  { dateTime: startTime.toISOString(), timeZone: OWNER_TZ },
     end:    { dateTime: endTime.toISOString(),   timeZone: OWNER_TZ },
     attendees: [
       { email: email, displayName: name },
     ],
-    conferenceData: {
-      createRequest: {
-        requestId:             Utilities.getUuid(),
-        conferenceSolutionKey: { type: 'hangoutsMeet' },
-      },
-    },
     reminders: {
       useDefault: false,
       overrides: [
@@ -274,30 +292,49 @@ function createEvent(body) {
     },
   }
 
+  if (!isInPerson) {
+    eventResource.conferenceData = {
+      createRequest: {
+        requestId:             Utilities.getUuid(),
+        conferenceSolutionKey: { type: 'hangoutsMeet' },
+      },
+    }
+  } else if (meetingLocation) {
+    eventResource.location = meetingLocation
+  }
+
+  const conferenceVersion = isInPerson ? 0 : 1
   const createdEvent = Calendar.Events.insert(
     eventResource,
     OWNER_CALENDAR_ID,
-    { conferenceDataVersion: 1, sendUpdates: 'all' }
+    { conferenceDataVersion: conferenceVersion, sendUpdates: 'all' }
   )
 
-  const meetLink = createdEvent.conferenceData
-    && createdEvent.conferenceData.entryPoints
-    && createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video')
-      ? createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video').uri
-      : 'https://meet.google.com'
+  const meetLink = isInPerson
+    ? null
+    : (
+        createdEvent.conferenceData
+        && createdEvent.conferenceData.entryPoints
+        && createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video')
+          ? createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video').uri
+          : 'https://meet.google.com'
+      )
 
   // Log the confirmed booking to Google Sheets (non-blocking)
   logBookingToSheet({
     name,
     email,
     subject,
-    startISO:  createdEvent.start.dateTime,
-    endISO:    createdEvent.end.dateTime,
-    duration:  Number(duration),
-    meetLink,
-    eventId:   createdEvent.id,
-    userTz:    userTz || '',
-    requestId: requestId || '',
+    startISO:         createdEvent.start.dateTime,
+    endISO:           createdEvent.end.dateTime,
+    duration:         Number(duration),
+    meetLink:         meetLink || '',
+    eventId:          createdEvent.id,
+    userTz:           userTz || '',
+    requestId:        requestId || '',
+    meetingTypeId:    meetingTypeId || '',
+    locationMode:     locationMode || '',
+    meetingLocation:  meetingLocation || '',
   })
 
   return {
@@ -403,7 +440,8 @@ function getBookings(params) {
   // Sheet columns (1-indexed):
   // 1=Timestamp 2=Name 3=Email 4=Subject 5=Start(UTC) 6=End(UTC)
   // 7=Duration  8=MeetLink 9=EventId 10=UserTz 11=RequestId
-  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues()
+  // 12=MeetingType 13=LocationMode 14=MeetingLocation
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues()
   const now  = new Date()
 
   const bookings = data
@@ -414,19 +452,68 @@ function getBookings(params) {
       if (!startISO) return false
       return new Date(startISO) >= now   // only future meetings
     })
-    .map(row => ({
-      eventId:  String(row[8]  || ''),
-      name:     String(row[1]  || ''),
-      email:    String(row[2]  || ''),
-      subject:  String(row[3]  || ''),
-      startISO: String(row[4]  || ''),
-      endISO:   String(row[5]  || ''),
-      duration: Number(row[6]  || 0),
-      meetLink: String(row[7]  || ''),
-    }))
+    .map(row => rowToBooking(row))
     .sort((a, b) => new Date(a.startISO) - new Date(b.startISO))
 
   return { ok: true, bookings }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  GET ALL BOOKINGS (admin — all future meetings)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Return all upcoming bookings from the sheet (admin use).
+ * No email filter — returns every future booking.
+ *
+ * Params: (none required)
+ *   includePast – 'true' to include past bookings too (default: false)
+ *
+ * Response:
+ *   { ok: true, bookings: [...] }
+ */
+function getAllBookings(params) {
+  if (!BOOKING_SHEET_ID) {
+    return { ok: true, bookings: [] }
+  }
+
+  const ss    = SpreadsheetApp.openById(BOOKING_SHEET_ID)
+  const sheet = ss.getSheetByName(BOOKING_SHEET_TAB)
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return { ok: true, bookings: [] }
+  }
+
+  const includePast = (params && params.includePast === 'true')
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 14).getValues()
+  const now  = new Date()
+
+  const bookings = data
+    .filter(row => {
+      const startISO = String(row[4] || '')
+      if (!startISO) return false
+      return includePast || new Date(startISO) >= now
+    })
+    .map(row => rowToBooking(row))
+    .sort((a, b) => new Date(a.startISO) - new Date(b.startISO))
+
+  return { ok: true, bookings }
+}
+
+/** Map a sheet row array to a booking object. */
+function rowToBooking(row) {
+  return {
+    eventId:         String(row[8]  || ''),
+    name:            String(row[1]  || ''),
+    email:           String(row[2]  || ''),
+    subject:         String(row[3]  || ''),
+    startISO:        String(row[4]  || ''),
+    endISO:          String(row[5]  || ''),
+    duration:        Number(row[6]  || 0),
+    meetLink:        String(row[7]  || ''),
+    meetingTypeId:   String(row[11] || ''),
+    locationMode:    String(row[12] || ''),
+    meetingLocation: String(row[13] || ''),
+  }
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -450,8 +537,11 @@ function getBookings(params) {
  * @param {number} params.duration  – minutes
  * @param {string} params.meetLink
  * @param {string} params.eventId
- * @param {string} params.userTz    – IANA timezone of the attendee
+ * @param {string} params.userTz          – IANA timezone of the attendee
  * @param {string} params.requestId
+ * @param {string} params.meetingTypeId   – e.g. 'coaching_60'
+ * @param {string} params.locationMode    – 'virtual' | 'hybrid' | 'in_person'
+ * @param {string} params.meetingLocation – physical address (in_person only)
  */
 function logBookingToSheet(params) {
   if (!BOOKING_SHEET_ID) return   // logging disabled
@@ -479,25 +569,31 @@ function logBookingToSheet(params) {
         'Event ID',
         'User Timezone',
         'Request ID',
+        'Meeting Type',
+        'Location Mode',
+        'Meeting Location',
       ])
 
       // Bold + freeze the header row for readability
-      sheet.getRange(1, 1, 1, 11).setFontWeight('bold')
+      sheet.getRange(1, 1, 1, 14).setFontWeight('bold')
       sheet.setFrozenRows(1)
     }
 
     sheet.appendRow([
-      new Date(),              // Timestamp (logged at booking time)
+      new Date(),                       // Timestamp (logged at booking time)
       params.name,
       params.email,
-      params.subject   || '',
-      params.startISO  || '',
-      params.endISO    || '',
-      params.duration  || '',
-      params.meetLink  || '',
-      params.eventId   || '',
-      params.userTz    || '',
-      params.requestId || '',
+      params.subject          || '',
+      params.startISO         || '',
+      params.endISO           || '',
+      params.duration         || '',
+      params.meetLink         || '',
+      params.eventId          || '',
+      params.userTz           || '',
+      params.requestId        || '',
+      params.meetingTypeId    || '',
+      params.locationMode     || '',
+      params.meetingLocation  || '',
     ])
 
     Logger.log('logBookingToSheet: row appended for ' + params.email)
@@ -541,16 +637,19 @@ function testSheetAccess() {
 
     // Write a test row
     logBookingToSheet({
-      name:      'TEST USER',
-      email:     'test@example.com',
-      subject:   'TEST BOOKING — safe to delete',
-      startISO:  new Date().toISOString(),
-      endISO:    new Date(Date.now() + 30 * 60 * 1000).toISOString(),
-      duration:  30,
-      meetLink:  'https://meet.google.com/test',
-      eventId:   'test-event-id-' + Date.now(),
-      userTz:    'Asia/Jerusalem',
-      requestId: 'test-' + Date.now(),
+      name:            'TEST USER',
+      email:           'test@example.com',
+      subject:         'TEST BOOKING — safe to delete',
+      startISO:        new Date().toISOString(),
+      endISO:          new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      duration:        30,
+      meetLink:        'https://meet.google.com/test',
+      eventId:         'test-event-id-' + Date.now(),
+      userTz:          'Asia/Jerusalem',
+      requestId:       'test-' + Date.now(),
+      meetingTypeId:   'general_30',
+      locationMode:    'virtual',
+      meetingLocation: '',
     })
 
     Logger.log('✅ Test row written successfully. Check the Bookings tab in your sheet.')
