@@ -28,6 +28,75 @@ const GAS_URL   =
   'https://script.google.com/macros/s/AKfycbxIt5jVoSmstOxBh2Ojej3hwSNPHxuWc-gu6CT5-A5iwJEO_8bJYFxg269UJaa0mt09/exec'
 const API_KEY   = process.env.API_KEY || ''
 
+// ── Slot generation (mirrors src/utils/timeSlots.js) ────────────────────────
+
+const OWNER_TZ       = 'Asia/Jerusalem'
+const WORKING_HOURS  = { start: 9, end: 18 }
+const BUFFER_MINS    = 15
+const MIN_NOTICE_HRS = 2
+
+function pad(n) { return String(n).padStart(2, '0') }
+
+/** Parse 'YYYY-MM-DDTHH:MM:SS' as if it's in the given IANA timezone */
+function parseInTz(localStr, tz) {
+  const approxUtc = new Date(localStr + 'Z')
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+  }).formatToParts(approxUtc)
+  const get  = (t) => parts.find(p => p.type === t)?.value || '00'
+  const tzStr = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`
+  const diff  = approxUtc - new Date(tzStr + 'Z')
+  return new Date(approxUtc.getTime() - diff)
+}
+
+/** Format a UTC Date as "9:00 AM" in the given IANA timezone */
+function formatInTz(date, tz) {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: tz, hour: 'numeric', minute: '2-digit', hour12: true,
+  }).format(date)
+}
+
+/**
+ * Compute available slots for a date given a list of busy blocks.
+ * @param {string} dateStr   - 'YYYY-MM-DD'
+ * @param {Array}  busySlots - [{start: ISO, end: ISO}] already buffered by GAS
+ * @param {string} userTz    - IANA timezone for slot labels
+ * @param {number} duration  - minutes (30 or 60)
+ */
+function generateAvailableSlots(dateStr, busySlots, userTz, duration) {
+  const slots   = []
+  const now     = new Date()
+  const cutoff  = new Date(now.getTime() + MIN_NOTICE_HRS * 60 * 60 * 1000)
+
+  const workStart = parseInTz(`${dateStr}T${pad(WORKING_HOURS.start)}:00:00`, OWNER_TZ)
+  const workEnd   = parseInTz(`${dateStr}T${pad(WORKING_HOURS.end)}:00:00`,   OWNER_TZ)
+
+  // Busy blocks are already buffered by GAS; add client-side buffer on top
+  const busy = busySlots.map(b => ({
+    start: new Date(new Date(b.start).getTime() - BUFFER_MINS * 60 * 1000),
+    end:   new Date(new Date(b.end).getTime()   + BUFFER_MINS * 60 * 1000),
+  }))
+
+  let cursor = new Date(workStart)
+  while (cursor < workEnd) {
+    const slotEnd = new Date(cursor.getTime() + duration * 60 * 1000)
+    if (slotEnd > workEnd) break
+    if (cursor >= cutoff) {
+      const overlaps = busy.some(b => cursor < b.end && slotEnd > b.start)
+      if (!overlaps) {
+        slots.push({
+          start: cursor.toISOString(),
+          end:   slotEnd.toISOString(),
+          label: formatInTz(cursor, userTz || OWNER_TZ),
+        })
+      }
+    }
+    cursor = new Date(cursor.getTime() + 30 * 60 * 1000)
+  }
+  return slots
+}
+
 // ── Middleware ───────────────────────────────────────────────────────────────
 
 app.use(express.json())
@@ -92,11 +161,12 @@ app.get('/api/slots', requireApiKey, async (req, res) => {
   }
 
   try {
-    const params = new URLSearchParams({ action: 'getBusySlots', date, tz, duration })
-    const gasRes = await fetch(`${GAS_URL}?${params}`)
-    const data   = await gasRes.json()
+    const params   = new URLSearchParams({ action: 'getBusySlots', date, tz, duration })
+    const gasRes   = await fetch(`${GAS_URL}?${params}`)
+    const data     = await gasRes.json()
     if (data.error) return res.status(502).json({ ok: false, error: data.error })
-    res.json({ ok: true, slots: data.busySlots || [] })
+    const slots    = generateAvailableSlots(date, data.busySlots || [], tz, Number(duration))
+    res.json({ ok: true, slots })
   } catch (err) {
     res.status(502).json({ ok: false, error: err.message })
   }
