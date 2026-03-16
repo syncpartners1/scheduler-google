@@ -1,12 +1,7 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { MAX_DAYS_AHEAD } from '../config.js'
-
-const DAYS   = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
-const MONTHS = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
-]
+import { t } from '../i18n.js'
 
 function startOfDay(date) {
   const d = new Date(date)
@@ -14,8 +9,8 @@ function startOfDay(date) {
   return d
 }
 
-export default function CalendarPicker({ onSelect }) {
-  const today = startOfDay(new Date())
+export default function CalendarPicker({ onSelect, lang = 'en' }) {
+  const today   = startOfDay(new Date())
   const maxDate = new Date(today.getTime() + MAX_DAYS_AHEAD * 24 * 60 * 60 * 1000)
 
   const [viewDate, setViewDate] = useState(() => {
@@ -25,17 +20,17 @@ export default function CalendarPicker({ onSelect }) {
     return d
   })
 
-  const year  = viewDate.getFullYear()
-  const month = viewDate.getMonth()
+  const year        = viewDate.getFullYear()
+  const month       = viewDate.getMonth()
+  const DAYS        = t(lang, 'days')
+  const MONTHS      = t(lang, 'months')
 
-  // First day of the month, and how many cells to offset
-  const firstDay = new Date(year, month, 1).getDay()   // 0 = Sun
+  const firstDay    = new Date(year, month, 1).getDay()
   const daysInMonth = new Date(year, month + 1, 0).getDate()
 
   const prevMonth = () => {
     const d = new Date(viewDate)
     d.setMonth(d.getMonth() - 1)
-    // Don't go before current month
     const thisMonth = new Date(today)
     thisMonth.setDate(1)
     if (d >= thisMonth) setViewDate(d)
@@ -64,9 +59,7 @@ export default function CalendarPicker({ onSelect }) {
   const handleDayClick = (day) => {
     const selected = new Date(year, month, day)
     selected.setHours(0, 0, 0, 0)
-    if (selected >= today && selected <= maxDate) {
-      onSelect(selected)
-    }
+    if (selected >= today && selected <= maxDate) onSelect(selected)
   }
 
   const isDisabled = (day) => {
@@ -74,20 +67,17 @@ export default function CalendarPicker({ onSelect }) {
     return d < today || d > maxDate
   }
 
-  const isToday = (day) => {
-    const d = new Date(year, month, day)
-    return d.toDateString() === today.toDateString()
-  }
+  const isToday = (day) =>
+    new Date(year, month, day).toDateString() === today.toDateString()
 
-  // Build calendar grid cells
   const cells = []
   for (let i = 0; i < firstDay; i++) cells.push(null)
   for (let d = 1; d <= daysInMonth; d++) cells.push(d)
 
   return (
     <div className="p-6">
-      <h2 className="text-lg font-semibold text-gray-800 mb-1">Select a Date</h2>
-      <p className="text-sm text-gray-400 mb-5">Choose a day to see available times</p>
+      <h2 className="text-lg font-semibold text-gray-800 mb-1">{t(lang, 'select_date')}</h2>
+      <p className="text-sm text-gray-400 mb-5">{t(lang, 'select_date_sub')}</p>
 
       {/* Month navigation */}
       <div className="flex items-center justify-between mb-4">
@@ -99,9 +89,7 @@ export default function CalendarPicker({ onSelect }) {
         >
           <ChevronLeft className="w-5 h-5 text-gray-600" />
         </button>
-        <span className="font-semibold text-gray-800">
-          {MONTHS[month]} {year}
-        </span>
+        <span className="font-semibold text-gray-800">{MONTHS[month]} {year}</span>
         <button
           onClick={nextMonth}
           disabled={!canGoNext()}
@@ -115,9 +103,7 @@ export default function CalendarPicker({ onSelect }) {
       {/* Day-of-week headers */}
       <div className="grid grid-cols-7 mb-2">
         {DAYS.map(d => (
-          <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">
-            {d}
-          </div>
+          <div key={d} className="text-center text-xs font-medium text-gray-400 py-1">{d}</div>
         ))}
       </div>
 
