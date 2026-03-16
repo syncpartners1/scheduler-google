@@ -48,7 +48,7 @@
 // ─────────────────────────────────────────────────────────────
 
 /** Your Google Calendar ID. Usually your Gmail address. */
-const OWNER_CALENDAR_ID = 'your-email@gmail.com'
+const OWNER_CALENDAR_ID = 'syncpartners1@gmail.com'
 
 /** Timezone for your working hours (IANA format). */
 const OWNER_TZ = 'Asia/Jerusalem'
