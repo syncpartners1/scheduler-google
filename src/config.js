@@ -15,8 +15,9 @@ export const GAS_URL =
   'https://script.google.com/macros/s/AKfycbxVe7r1QIZus4kwPlWk5T6ntKO8ebAtouz6dQzRuVgVd1bhbQMX5ZbQteJIORhv0LLB/exec'
 
 // ── Owner / Calendar settings ────────────────────────────────────────────────
-export const OWNER_NAME = import.meta.env.VITE_OWNER_NAME || 'Your Name'
-export const OWNER_TZ   = 'Asia/Jerusalem'   // owner's timezone (Israel)
+export const OWNER_NAME      = import.meta.env.VITE_OWNER_NAME      || 'Adi Ben-Nesher'
+export const OWNER_PHOTO_URL = import.meta.env.VITE_OWNER_PHOTO_URL || '/adi.jpg'
+export const OWNER_TZ        = 'Asia/Jerusalem'   // owner's timezone (Israel)
 
 // ── Working hours (in OWNER_TZ) ──────────────────────────────────────────────
 export const WORKING_HOURS = {

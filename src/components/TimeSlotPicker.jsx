@@ -2,11 +2,7 @@ import { useMemo } from 'react'
 import { ChevronLeft, Clock, Loader2, AlertCircle } from 'lucide-react'
 import { generateAvailableSlots, formatDateTimeInTz } from '../utils/timeSlots.js'
 import { MEETING_TYPES } from '../config.js'
-
-const MONTHS = [
-  'January','February','March','April','May','June',
-  'July','August','September','October','November','December',
-]
+import { t } from '../i18n.js'
 
 export default function TimeSlotPicker({
   selectedDate,
@@ -18,6 +14,7 @@ export default function TimeSlotPicker({
   onMeetingTypeChange,
   onSelect,
   onBack,
+  lang = 'en',
 }) {
   const slots = useMemo(
     () => loading || error
@@ -26,6 +23,7 @@ export default function TimeSlotPicker({
     [selectedDate, busySlots, loading, error, userTz, meetingType.duration]
   )
 
+  const MONTHS    = t(lang, 'months')
   const dateLabel = selectedDate
     ? `${MONTHS[selectedDate.getMonth()]} ${selectedDate.getDate()}, ${selectedDate.getFullYear()}`
     : ''
@@ -41,16 +39,20 @@ export default function TimeSlotPicker({
         >
           <ChevronLeft className="w-5 h-5 text-gray-500" />
         </button>
-        <h2 className="text-lg font-semibold text-gray-800">Select a Time</h2>
+        <h2 className="text-lg font-semibold text-gray-800">{t(lang, 'select_time')}</h2>
       </div>
       <p className="text-sm text-gray-400 mb-5 ml-8">{dateLabel}</p>
 
       {/* Meeting type selector */}
       <div className="mb-5">
-        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">Meeting Type</p>
+        <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
+          {t(lang, 'meeting_type_lbl')}
+        </p>
         <div className="space-y-1.5">
           {MEETING_TYPES.map(mt => {
             const active = meetingType.id === mt.id
+            const label  = t(lang, `mt_${mt.id}_label`)
+            const sub    = t(lang, `mt_${mt.id}_sub`)
             return (
               <button
                 key={mt.id}
@@ -63,9 +65,9 @@ export default function TimeSlotPicker({
                   }
                 `}
               >
-                <span className="font-medium">{mt.label}</span>
+                <span className="font-medium">{label}</span>
                 <span className={`text-xs ${active ? 'text-brand-100' : 'text-gray-400'}`}>
-                  {mt.duration} min · {mt.subtitle}
+                  {mt.duration} {lang === 'he' ? 'דק׳' : 'min'} · {sub}
                 </span>
               </button>
             )
@@ -77,7 +79,7 @@ export default function TimeSlotPicker({
       {loading && (
         <div className="flex flex-col items-center justify-center py-14 text-gray-400">
           <Loader2 className="w-6 h-6 animate-spin mb-2" />
-          <span className="text-sm">Loading availability…</span>
+          <span className="text-sm">{t(lang, 'loading')}</span>
         </div>
       )}
 
@@ -91,8 +93,8 @@ export default function TimeSlotPicker({
       {!loading && !error && slots.length === 0 && (
         <div className="text-center py-14 text-gray-400">
           <Clock className="w-8 h-8 mx-auto mb-3 opacity-40" />
-          <p className="text-sm font-medium">No available slots</p>
-          <p className="text-xs mt-1">Try a different date or meeting type</p>
+          <p className="text-sm font-medium">{t(lang, 'no_slots')}</p>
+          <p className="text-xs mt-1">{t(lang, 'no_slots_hint')}</p>
         </div>
       )}
 
@@ -112,10 +114,9 @@ export default function TimeSlotPicker({
         </div>
       )}
 
-      {/* Timezone note */}
       {!loading && slots.length > 0 && (
         <p className="text-xs text-gray-400 mt-4 text-center">
-          Times shown in your local timezone ({userTz})
+          {t(lang, 'times_in_tz')} ({userTz})
         </p>
       )}
     </div>
