@@ -22,7 +22,7 @@ import { Telegraf, Markup } from 'telegraf'
 import fetch from 'node-fetch'
 
 const BOT_TOKEN  = process.env.TELEGRAM_BOT_TOKEN
-const SERVER_URL = process.env.SERVER_URL || 'http://localhost:3000'
+const SERVER_URL = process.env.SERVER_URL || 'https://abn-sch.up.railway.app'
 const API_KEY    = process.env.API_KEY    || ''
 
 if (!BOT_TOKEN) {

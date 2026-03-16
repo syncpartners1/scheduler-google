@@ -107,6 +107,10 @@ function handleRequest(e, body) {
         return jsonResponse(getBusySlots(e.parameter))
       case 'createEvent':
         return jsonResponse(createEvent(body))
+      case 'cancelEvent':
+        return jsonResponse(cancelEvent(body))
+      case 'getBookings':
+        return jsonResponse(getBookings(e.parameter))
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400)
     }
@@ -306,6 +310,126 @@ function createEvent(body) {
 }
 
 // ─────────────────────────────────────────────────────────────
+//  CANCEL EVENT
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Cancel (delete) a Google Calendar event by its eventId.
+ * Sends cancellation notifications to all attendees.
+ *
+ * Body params:
+ *   eventId   – the Google Calendar event ID (returned by createEvent)
+ *   reason    – optional cancellation reason (stored in sheet log)
+ *
+ * Response (success):
+ *   { ok: true, eventId }
+ *
+ * Response (error):
+ *   { ok: false, error: '...' }
+ */
+function cancelEvent(body) {
+  const { eventId, reason } = body
+
+  if (!eventId) {
+    throw new Error('Missing required field: eventId')
+  }
+
+  // Verify the event exists and belongs to our calendar before deleting
+  const calendar = CalendarApp.getCalendarById(OWNER_CALENDAR_ID)
+  if (!calendar) throw new Error('Calendar not found. Check OWNER_CALENDAR_ID.')
+
+  let event = null
+  try {
+    // CalendarApp can fetch by ID directly
+    event = calendar.getEventById(eventId)
+  } catch (_) {
+    // getEventById throws if not found in some GAS versions
+  }
+
+  if (!event) {
+    return { ok: false, error: 'Event not found or already cancelled.' }
+  }
+
+  // Capture details for the sheet log before deleting
+  const startISO   = event.getStartTime().toISOString()
+  const endISO     = event.getEndTime().toISOString()
+  const title      = event.getTitle()
+  const desc       = event.getDescription() || ''
+
+  // Delete the event and notify attendees
+  event.deleteEvent()
+
+  // Log cancellation to Google Sheet
+  logCancellationToSheet({
+    eventId,
+    title,
+    startISO,
+    endISO,
+    reason: reason || '',
+    description: desc,
+  })
+
+  return { ok: true, eventId }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  GET BOOKINGS (from Google Sheet)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Return upcoming bookings for a given email address by reading the
+ * Bookings sheet. Only returns future meetings (start time >= now).
+ *
+ * Params:
+ *   email – the attendee's email address
+ *
+ * Response:
+ *   { ok: true, bookings: [{eventId, name, email, subject, startISO, endISO, duration, meetLink}] }
+ */
+function getBookings(params) {
+  const email = (params.email || '').trim().toLowerCase()
+  if (!email) throw new Error('email param required')
+
+  if (!BOOKING_SHEET_ID) {
+    return { ok: true, bookings: [] }
+  }
+
+  const ss    = SpreadsheetApp.openById(BOOKING_SHEET_ID)
+  const sheet = ss.getSheetByName(BOOKING_SHEET_TAB)
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return { ok: true, bookings: [] }
+  }
+
+  // Sheet columns (1-indexed):
+  // 1=Timestamp 2=Name 3=Email 4=Subject 5=Start(UTC) 6=End(UTC)
+  // 7=Duration  8=MeetLink 9=EventId 10=UserTz 11=RequestId
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues()
+  const now  = new Date()
+
+  const bookings = data
+    .filter(row => {
+      const rowEmail = String(row[2] || '').trim().toLowerCase()
+      const startISO = String(row[4] || '')
+      if (rowEmail !== email) return false
+      if (!startISO) return false
+      return new Date(startISO) >= now   // only future meetings
+    })
+    .map(row => ({
+      eventId:  String(row[8]  || ''),
+      name:     String(row[1]  || ''),
+      email:    String(row[2]  || ''),
+      subject:  String(row[3]  || ''),
+      startISO: String(row[4]  || ''),
+      endISO:   String(row[5]  || ''),
+      duration: Number(row[6]  || 0),
+      meetLink: String(row[7]  || ''),
+    }))
+    .sort((a, b) => new Date(a.startISO) - new Date(b.startISO))
+
+  return { ok: true, bookings }
+}
+
+// ─────────────────────────────────────────────────────────────
 //  GOOGLE SHEET LOGGING
 // ─────────────────────────────────────────────────────────────
 
@@ -378,6 +502,41 @@ function logBookingToSheet(params) {
   } catch (err) {
     // Non-fatal — don't let a sheet error break the booking response
     Logger.log('logBookingToSheet error: ' + err.message)
+  }
+}
+
+/**
+ * Log a cancellation to a separate "Cancellations" tab in the same spreadsheet.
+ * Silently skips if BOOKING_SHEET_ID is not set.
+ */
+function logCancellationToSheet(params) {
+  if (!BOOKING_SHEET_ID) return
+
+  try {
+    const ss        = SpreadsheetApp.openById(BOOKING_SHEET_ID)
+    const tabName   = 'Cancellations'
+    let sheet       = ss.getSheetByName(tabName)
+
+    if (!sheet) {
+      sheet = ss.insertSheet(tabName)
+    }
+
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow(['Timestamp', 'Event ID', 'Title', 'Start Time (UTC)', 'End Time (UTC)', 'Reason'])
+      sheet.getRange(1, 1, 1, 6).setFontWeight('bold')
+      sheet.setFrozenRows(1)
+    }
+
+    sheet.appendRow([
+      new Date(),
+      params.eventId   || '',
+      params.title     || '',
+      params.startISO  || '',
+      params.endISO    || '',
+      params.reason    || '',
+    ])
+  } catch (err) {
+    Logger.log('logCancellationToSheet error: ' + err.message)
   }
 }
 

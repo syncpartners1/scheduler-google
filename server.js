@@ -140,6 +140,69 @@ app.post('/api/book', requireApiKey, async (req, res) => {
   }
 })
 
+/**
+ * POST /api/cancel
+ *
+ * Cancel a previously created booking by its Google Calendar event ID.
+ * Protected by X-Api-Key header.
+ *
+ * Body: { eventId, reason? }
+ * Response: { ok: true, eventId }
+ */
+app.post('/api/cancel', requireApiKey, async (req, res) => {
+  const { eventId, reason } = req.body
+
+  if (!eventId) {
+    return res.status(400).json({ ok: false, error: 'Missing required field: eventId' })
+  }
+  if (!GAS_URL) {
+    return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
+  }
+
+  try {
+    const gasRes = await fetch(GAS_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({ action: 'cancelEvent', eventId, reason: reason || '' }),
+    })
+    const data = await gasRes.json()
+    if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Cancellation failed' })
+    res.json(data)
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message })
+  }
+})
+
+/**
+ * GET /api/bookings?email=user@example.com
+ *
+ * Look up upcoming bookings for an email address.
+ * Reads from the Google Sheet via GAS (no Supabase required).
+ * Protected by X-Api-Key header.
+ *
+ * Response: { ok: true, bookings: [{eventId, name, email, subject, startISO, endISO, duration, meetLink}] }
+ */
+app.get('/api/bookings', requireApiKey, async (req, res) => {
+  const { email } = req.query
+
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ ok: false, error: 'email param required' })
+  }
+  if (!GAS_URL) {
+    return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
+  }
+
+  try {
+    const params  = new URLSearchParams({ action: 'getBookings', email })
+    const gasRes  = await fetch(`${GAS_URL}?${params}`)
+    const data    = await gasRes.json()
+    if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Could not fetch bookings' })
+    res.json(data)
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message })
+  }
+})
+
 // ── Static file serving (React build) ───────────────────────────────────────
 
 const distDir = join(__dirname, 'dist')
