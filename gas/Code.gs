@@ -15,14 +15,20 @@
  *  4. Enable the Calendar Advanced Service:
  *       Extensions → Apps Script → Services (+)
  *       Find "Google Calendar API" → Add → OK
- *  5. Deploy as a Web App:
+ *  5. (Optional) Set up Google Sheet booking log:
+ *       a. Create a new Google Sheet at https://sheets.google.com
+ *       b. Copy its ID from the URL (the long string between /d/ and /edit)
+ *       c. Paste the ID as BOOKING_SHEET_ID below
+ *       d. The script will auto-create the "Bookings" tab and header row
+ *          on the first booking.
+ *  6. Deploy as a Web App:
  *       Deploy → New deployment → Web app
  *       - Description: "Scheduling API v1"
  *       - Execute as: Me
  *       - Who has access: Anyone
- *       → Click Deploy → Authorize (grant Calendar + Gmail access)
- *  6. Copy the Web App URL
- *  7. Paste it as VITE_GAS_URL in your Railway environment variables
+ *       → Click Deploy → Authorize (grant Calendar + Gmail + Sheets access)
+ *  7. Copy the Web App URL
+ *  8. Paste it as VITE_GAS_URL in your Railway environment variables
  *     AND as GAS_URL for the server-side Express proxy.
  *
  * ── RE-DEPLOYING AFTER CHANGES ──────────────────────────────
@@ -55,6 +61,24 @@ const BUFFER_MINS = 15
 
 /** Minimum notice period — cannot book within this many hours from now. */
 const MIN_NOTICE_HOURS = 2
+
+/**
+ * Google Spreadsheet ID for booking log.
+ * Leave empty ('') to disable sheet logging.
+ *
+ * How to find it: open your Google Sheet and copy the ID from the URL:
+ *   https://docs.google.com/spreadsheets/d/SPREADSHEET_ID/edit
+ *
+ * The script will automatically create a header row on first use.
+ * The sheet must be accessible to the account running this script.
+ */
+const BOOKING_SHEET_ID = ''
+
+/**
+ * Name of the tab (worksheet) inside the spreadsheet where rows are appended.
+ * Will be created automatically if it doesn't exist.
+ */
+const BOOKING_SHEET_TAB = 'Bookings'
 
 // ─────────────────────────────────────────────────────────────
 //  HTTP ROUTER
@@ -258,12 +282,102 @@ function createEvent(body) {
       ? createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video').uri
       : 'https://meet.google.com'
 
+  // Log the confirmed booking to Google Sheets (non-blocking)
+  logBookingToSheet({
+    name,
+    email,
+    subject,
+    startISO:  createdEvent.start.dateTime,
+    endISO:    createdEvent.end.dateTime,
+    duration:  Number(duration),
+    meetLink,
+    eventId:   createdEvent.id,
+    userTz:    userTz || '',
+    requestId: requestId || '',
+  })
+
   return {
     ok:       true,
     eventId:  createdEvent.id,
     meetLink: meetLink,
     startISO: createdEvent.start.dateTime,
     endISO:   createdEvent.end.dateTime,
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  GOOGLE SHEET LOGGING
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Append a booking record to the configured Google Sheet.
+ * Silently skips if BOOKING_SHEET_ID is not set.
+ *
+ * Sheet columns (auto-created header row on first use):
+ *   Timestamp | Name | Email | Subject | Start Time | End Time |
+ *   Duration (min) | Meet Link | Event ID | User Timezone | Request ID
+ *
+ * @param {Object} params
+ * @param {string} params.name
+ * @param {string} params.email
+ * @param {string} params.subject
+ * @param {string} params.startISO  – UTC ISO string
+ * @param {string} params.endISO    – UTC ISO string
+ * @param {number} params.duration  – minutes
+ * @param {string} params.meetLink
+ * @param {string} params.eventId
+ * @param {string} params.userTz    – IANA timezone of the attendee
+ * @param {string} params.requestId
+ */
+function logBookingToSheet(params) {
+  if (!BOOKING_SHEET_ID) return   // logging disabled
+
+  try {
+    const ss  = SpreadsheetApp.openById(BOOKING_SHEET_ID)
+    let sheet = ss.getSheetByName(BOOKING_SHEET_TAB)
+
+    // Create the tab if it doesn't exist yet
+    if (!sheet) {
+      sheet = ss.insertSheet(BOOKING_SHEET_TAB)
+    }
+
+    // Write the header row if the sheet is empty
+    if (sheet.getLastRow() === 0) {
+      sheet.appendRow([
+        'Timestamp',
+        'Name',
+        'Email',
+        'Subject',
+        'Start Time (UTC)',
+        'End Time (UTC)',
+        'Duration (min)',
+        'Meet Link',
+        'Event ID',
+        'User Timezone',
+        'Request ID',
+      ])
+
+      // Bold + freeze the header row for readability
+      sheet.getRange(1, 1, 1, 11).setFontWeight('bold')
+      sheet.setFrozenRows(1)
+    }
+
+    sheet.appendRow([
+      new Date(),              // Timestamp (logged at booking time)
+      params.name,
+      params.email,
+      params.subject   || '',
+      params.startISO  || '',
+      params.endISO    || '',
+      params.duration  || '',
+      params.meetLink  || '',
+      params.eventId   || '',
+      params.userTz    || '',
+      params.requestId || '',
+    ])
+  } catch (err) {
+    // Non-fatal — don't let a sheet error break the booking response
+    Logger.log('logBookingToSheet error: ' + err.message)
   }
 }
 
