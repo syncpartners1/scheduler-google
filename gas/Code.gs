@@ -499,9 +499,68 @@ function logBookingToSheet(params) {
       params.userTz    || '',
       params.requestId || '',
     ])
+
+    Logger.log('logBookingToSheet: row appended for ' + params.email)
   } catch (err) {
     // Non-fatal — don't let a sheet error break the booking response
-    Logger.log('logBookingToSheet error: ' + err.message)
+    // Check execution log (View → Executions) in Apps Script editor to diagnose
+    Logger.log('logBookingToSheet ERROR: ' + err.message + ' | sheetId=' + BOOKING_SHEET_ID)
+    console.error('logBookingToSheet ERROR:', err.message)
+  }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  DIAGNOSTIC — run manually from Apps Script editor to verify
+//  sheet access before relying on real bookings.
+//  Steps: open script editor → select testSheetAccess → Run
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Manual test function — run this from the Apps Script editor to
+ * check that the sheet is accessible and writable.
+ * Open: Extensions → Apps Script → select testSheetAccess → Run
+ * Check the Execution Log (View → Executions) for the result.
+ */
+function testSheetAccess() {
+  if (!BOOKING_SHEET_ID) {
+    Logger.log('BOOKING_SHEET_ID is empty — sheet logging is disabled')
+    return
+  }
+
+  try {
+    const ss = SpreadsheetApp.openById(BOOKING_SHEET_ID)
+    Logger.log('✅ Opened spreadsheet: ' + ss.getName() + ' (' + ss.getId() + ')')
+
+    let sheet = ss.getSheetByName(BOOKING_SHEET_TAB)
+    if (!sheet) {
+      sheet = ss.insertSheet(BOOKING_SHEET_TAB)
+      Logger.log('✅ Created new tab: ' + BOOKING_SHEET_TAB)
+    } else {
+      Logger.log('✅ Found existing tab: ' + BOOKING_SHEET_TAB + ' (' + sheet.getLastRow() + ' rows)')
+    }
+
+    // Write a test row
+    logBookingToSheet({
+      name:      'TEST USER',
+      email:     'test@example.com',
+      subject:   'TEST BOOKING — safe to delete',
+      startISO:  new Date().toISOString(),
+      endISO:    new Date(Date.now() + 30 * 60 * 1000).toISOString(),
+      duration:  30,
+      meetLink:  'https://meet.google.com/test',
+      eventId:   'test-event-id-' + Date.now(),
+      userTz:    'Asia/Jerusalem',
+      requestId: 'test-' + Date.now(),
+    })
+
+    Logger.log('✅ Test row written successfully. Check the Bookings tab in your sheet.')
+    Logger.log('Sheet URL: https://docs.google.com/spreadsheets/d/' + BOOKING_SHEET_ID)
+  } catch (err) {
+    Logger.log('❌ testSheetAccess FAILED: ' + err.message)
+    Logger.log('Possible causes:')
+    Logger.log('  1. Script does not have Sheets permission — re-authorize: Deploy → Manage deployments → Edit → New version → Deploy')
+    Logger.log('  2. Sheet ID is wrong or sheet was deleted')
+    Logger.log('  3. Sheet is not shared with the account running this script (' + Session.getActiveUser().getEmail() + ')')
   }
 }
 
