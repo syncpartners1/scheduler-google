@@ -34,8 +34,8 @@ export const SLOT_DURATIONS = [30, 60]
 export const MEETING_TYPES = [
   {
     id:          'intro_30',
-    label:       'Introduction',
-    subtitle:    'New lead · First call',
+    label:       'Introduction Meeting',
+    subtitle:    'First call',
     duration:    30,
     defaultMode: 'virtual',
   },
@@ -69,7 +69,7 @@ export const MEETING_TYPES = [
   },
 ]
 
-export const DEFAULT_MEETING_TYPE = MEETING_TYPES[0]  // Introduction (website / new lead default)
+export const DEFAULT_MEETING_TYPE = MEETING_TYPES[0]  // Introduction Meeting (website default)
 
 // ── Booking constraints ───────────────────────────────────────────────────────
 export const MIN_NOTICE_HOURS = 2   // cannot book within 2 hours of now
