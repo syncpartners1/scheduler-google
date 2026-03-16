@@ -72,7 +72,7 @@ const MIN_NOTICE_HOURS = 2
  * The script will automatically create a header row on first use.
  * The sheet must be accessible to the account running this script.
  */
-const BOOKING_SHEET_ID = ''
+const BOOKING_SHEET_ID = '1LGD1_3SkTecbMRmGcIfaD0wpEcKB3gBMrfS2xJjMOGg'
 
 /**
  * Name of the tab (worksheet) inside the spreadsheet where rows are appended.
