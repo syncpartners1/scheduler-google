@@ -176,13 +176,11 @@ app.post('/api/cancel', requireApiKey, async (req, res) => {
 /**
  * GET /api/bookings?email=user@example.com
  *
- * Look up upcoming bookings for an email address from Supabase.
+ * Look up upcoming bookings for an email address.
+ * Reads from the Google Sheet via GAS (no Supabase required).
  * Protected by X-Api-Key header.
  *
- * Response: { ok: true, bookings: [{id, name, email, subject, start_time, end_time, duration_mins, meet_link, event_id}] }
- *
- * Note: requires Supabase to be configured via SUPABASE_URL + SUPABASE_SERVICE_KEY env vars.
- * Returns empty array (not an error) if Supabase is not configured.
+ * Response: { ok: true, bookings: [{eventId, name, email, subject, startISO, endISO, duration, meetLink}] }
  */
 app.get('/api/bookings', requireApiKey, async (req, res) => {
   const { email } = req.query
@@ -190,30 +188,16 @@ app.get('/api/bookings', requireApiKey, async (req, res) => {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ ok: false, error: 'email param required' })
   }
-
-  const supabaseUrl = process.env.SUPABASE_URL
-  const supabaseKey = process.env.SUPABASE_SERVICE_KEY  // service key for server-side reads
-
-  if (!supabaseUrl || !supabaseKey) {
-    return res.json({ ok: true, bookings: [] })
+  if (!GAS_URL) {
+    return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
   }
 
   try {
-    const now = new Date().toISOString()
-    const supaRes = await fetch(
-      `${supabaseUrl}/rest/v1/bookings?email=eq.${encodeURIComponent(email)}&start_time=gte.${encodeURIComponent(now)}&order=start_time.asc`,
-      {
-        headers: {
-          'apikey':        supabaseKey,
-          'Authorization': `Bearer ${supabaseKey}`,
-        },
-      }
-    )
-    const bookings = await supaRes.json()
-    if (!Array.isArray(bookings)) {
-      return res.status(502).json({ ok: false, error: 'Supabase query failed' })
-    }
-    res.json({ ok: true, bookings })
+    const params  = new URLSearchParams({ action: 'getBookings', email })
+    const gasRes  = await fetch(`${GAS_URL}?${params}`)
+    const data    = await gasRes.json()
+    if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Could not fetch bookings' })
+    res.json(data)
   } catch (err) {
     res.status(502).json({ ok: false, error: err.message })
   }

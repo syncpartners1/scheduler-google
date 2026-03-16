@@ -109,6 +109,8 @@ function handleRequest(e, body) {
         return jsonResponse(createEvent(body))
       case 'cancelEvent':
         return jsonResponse(cancelEvent(body))
+      case 'getBookings':
+        return jsonResponse(getBookings(e.parameter))
       default:
         return jsonResponse({ error: `Unknown action: ${action}` }, 400)
     }
@@ -368,6 +370,63 @@ function cancelEvent(body) {
   })
 
   return { ok: true, eventId }
+}
+
+// ─────────────────────────────────────────────────────────────
+//  GET BOOKINGS (from Google Sheet)
+// ─────────────────────────────────────────────────────────────
+
+/**
+ * Return upcoming bookings for a given email address by reading the
+ * Bookings sheet. Only returns future meetings (start time >= now).
+ *
+ * Params:
+ *   email – the attendee's email address
+ *
+ * Response:
+ *   { ok: true, bookings: [{eventId, name, email, subject, startISO, endISO, duration, meetLink}] }
+ */
+function getBookings(params) {
+  const email = (params.email || '').trim().toLowerCase()
+  if (!email) throw new Error('email param required')
+
+  if (!BOOKING_SHEET_ID) {
+    return { ok: true, bookings: [] }
+  }
+
+  const ss    = SpreadsheetApp.openById(BOOKING_SHEET_ID)
+  const sheet = ss.getSheetByName(BOOKING_SHEET_TAB)
+  if (!sheet || sheet.getLastRow() <= 1) {
+    return { ok: true, bookings: [] }
+  }
+
+  // Sheet columns (1-indexed):
+  // 1=Timestamp 2=Name 3=Email 4=Subject 5=Start(UTC) 6=End(UTC)
+  // 7=Duration  8=MeetLink 9=EventId 10=UserTz 11=RequestId
+  const data = sheet.getRange(2, 1, sheet.getLastRow() - 1, 11).getValues()
+  const now  = new Date()
+
+  const bookings = data
+    .filter(row => {
+      const rowEmail = String(row[2] || '').trim().toLowerCase()
+      const startISO = String(row[4] || '')
+      if (rowEmail !== email) return false
+      if (!startISO) return false
+      return new Date(startISO) >= now   // only future meetings
+    })
+    .map(row => ({
+      eventId:  String(row[8]  || ''),
+      name:     String(row[1]  || ''),
+      email:    String(row[2]  || ''),
+      subject:  String(row[3]  || ''),
+      startISO: String(row[4]  || ''),
+      endISO:   String(row[5]  || ''),
+      duration: Number(row[6]  || 0),
+      meetLink: String(row[7]  || ''),
+    }))
+    .sort((a, b) => new Date(a.startISO) - new Date(b.startISO))
+
+  return { ok: true, bookings }
 }
 
 // ─────────────────────────────────────────────────────────────
