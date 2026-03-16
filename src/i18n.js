@@ -28,8 +28,8 @@ const strings = {
     times_in_tz:      'Times shown in your local timezone',
 
     // ── Meeting type labels & subtitles ───────────────────────────────────────
-    mt_intro_30_label:    'Introduction',
-    mt_intro_30_sub:      'New lead · First call',
+    mt_intro_30_label:    'Introduction Meeting',
+    mt_intro_30_sub:      'First call',
     mt_general_30_label:  '30 min · General',
     mt_general_30_sub:    'Quick meeting',
     mt_virtual_30_label:  '30 min · Virtual',
@@ -113,7 +113,7 @@ const strings = {
 
     // ── Meeting type labels & subtitles ───────────────────────────────────────
     mt_intro_30_label:    'הכרות',
-    mt_intro_30_sub:      'ליד חדש · שיחה ראשונה',
+    mt_intro_30_sub:      'שיחה ראשונה',
     mt_general_30_label:  '30 דק׳ · כללי',
     mt_general_30_sub:    'פגישה קצרה',
     mt_virtual_30_label:  '30 דק׳ · וירטואלי',
