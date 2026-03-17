@@ -193,7 +193,7 @@ function getBusySlots(params) {
  *   userTz          – attendee's IANA timezone (stored in event description)
  *   requestId       – idempotency key (prevents duplicate events on retry)
  *   meetingTypeId   – e.g. 'intro_30', 'coaching_60' (optional, for logging)
- *   meetingTypeLabel – e.g. '30 min · Introduction' (optional, for display)
+ *   meetingTypeLabel – e.g. 'Introduction Meeting' (optional, for display)
  *   locationMode    – 'virtual' | 'hybrid' | 'in_person' (default: 'virtual')
  *   location        – physical address (required when locationMode = 'in_person')
  *
