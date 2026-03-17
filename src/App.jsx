@@ -37,6 +37,15 @@ export default function App() {
     () => Intl.DateTimeFormat().resolvedOptions().timeZone
   )
 
+  // Lifted form state — preserved when user goes back to change time slot
+  const [formData, setFormData] = useState({
+    name:            '',
+    email:           '',
+    subject:         '',
+    locationMode:    DEFAULT_MEETING_TYPE.defaultMode,
+    meetingLocation: '',
+  })
+
   const isRTL = lang === 'he'
 
   // Sync lang into <html dir> so the whole page gets RTL layout
@@ -137,6 +146,8 @@ export default function App() {
   const handleMeetingTypeChange = (mt) => {
     setMeetingType(mt)
     setBusySlots([])
+    // Reset locationMode to new type's default when type changes
+    setFormData(prev => ({ ...prev, locationMode: mt.defaultMode, meetingLocation: '' }))
     fetchBusySlots(selectedDate, mt)
   }
 
@@ -152,6 +163,13 @@ export default function App() {
     setBusySlots([])
     setBooking(null)
     setMeetingType(DEFAULT_MEETING_TYPE)
+    setFormData({
+      name:            '',
+      email:           '',
+      subject:         '',
+      locationMode:    DEFAULT_MEETING_TYPE.defaultMode,
+      meetingLocation: '',
+    })
   }
 
   return (
@@ -228,8 +246,13 @@ export default function App() {
               selectedSlot={selectedSlot}
               meetingType={meetingType}
               userTz={userTz}
+              formData={formData}
+              onChange={setFormData}
               onSubmit={handleBooking}
-              onBack={() => setStep('slots')}
+              onBack={() => {
+                fetchBusySlots(selectedDate, meetingType)
+                setStep('slots')
+              }}
               lang={lang}
             />
           )}

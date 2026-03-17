@@ -52,7 +52,7 @@
 const OWNER_CALENDAR_ID = 'syncpartners1@gmail.com'
 
 /** Timezone for your working hours (IANA format). */
-const OWNER_TZ = 'UTC'
+const OWNER_TZ = 'Asia/Jerusalem'
 
 /** Working hours in OWNER_TZ (24-hour, inclusive start, exclusive end). */
 const WORKING_HOURS = { start: 9, end: 21 }
@@ -154,10 +154,12 @@ function getBusySlots(params) {
     throw new Error('date param required (YYYY-MM-DD)')
   }
 
-  // Build start/end of the day in OWNER_TZ
+  // Build start/end of the day in the script's timezone (Asia/Jerusalem, set in appsscript.json).
+  // Using the local Date constructor (not Date.UTC) lets GAS interpret the date in OWNER_TZ,
+  // so midnight means midnight Israel time, not UTC midnight.
   const [year, mon, day] = dateStr.split('-').map(Number)
-  const dayStart = new Date(Date.UTC(year, mon - 1, day, 0, 0, 0))
-  const dayEnd   = new Date(Date.UTC(year, mon - 1, day, 23, 59, 59))
+  const dayStart = new Date(year, mon - 1, day, 0, 0, 0)
+  const dayEnd   = new Date(year, mon - 1, day, 23, 59, 59)
 
   // Shift from UTC to OWNER_TZ (approximate — GAS CalendarApp uses the script's tz)
   const calendar = CalendarApp.getCalendarById(OWNER_CALENDAR_ID)
@@ -261,6 +263,7 @@ function createEvent(body) {
   const checkFrom = new Date(startTime.getTime() - bufMs)
   const checkTo   = new Date(endTime.getTime()   + bufMs)
   const conflicts = calendar.getEvents(checkFrom, checkTo)
+    .filter(e => !e.isAllDayEvent())   // all-day events (holidays, OOO) must not block slots
 
   if (conflicts.length > 0) {
     return { ok: false, error: 'Time slot is no longer available. Please pick another.' }
@@ -316,7 +319,9 @@ function createEvent(body) {
     { conferenceDataVersion: conferenceVersion, sendUpdates: 'all' }
   )
 
-  const meetLink = isInPerson
+  // Google sometimes provisions Meet links asynchronously — entryPoints may be empty right
+  // after insert. Retry once with a 2-second delay for virtual/hybrid meetings.
+  let meetLink = isInPerson
     ? null
     : (
         createdEvent.conferenceData
@@ -325,6 +330,20 @@ function createEvent(body) {
           ? createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video').uri
           : null
       )
+
+  if (!meetLink && !isInPerson) {
+    Utilities.sleep(2000)
+    try {
+      const evt2 = Calendar.Events.get(OWNER_CALENDAR_ID, createdEvent.id)
+      const eps2 = evt2.conferenceData && evt2.conferenceData.entryPoints
+      if (eps2) {
+        const vep = eps2.find(ep => ep.entryPointType === 'video')
+        if (vep && vep.uri) meetLink = vep.uri
+      }
+    } catch (e) {
+      Logger.log('Meet link retry failed: ' + e.message)
+    }
+  }
 
   // Log the confirmed booking to Google Sheets (non-blocking)
   logBookingToSheet({
