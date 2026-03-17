@@ -52,7 +52,7 @@
 const OWNER_CALENDAR_ID = 'syncpartners1@gmail.com'
 
 /** Timezone for your working hours (IANA format). */
-const OWNER_TZ = 'UTC'
+const OWNER_TZ = 'Asia/Jerusalem'
 
 /** Working hours in OWNER_TZ (24-hour, inclusive start, exclusive end). */
 const WORKING_HOURS = { start: 9, end: 21 }
@@ -101,25 +101,50 @@ function doPost(e) {
 
 function handleRequest(e, body) {
   const action = (e.parameter && e.parameter.action) || (body && body.action)
+  const ts     = new Date().toISOString()
 
   try {
+    let result
     switch (action) {
-      case 'getBusySlots':
-        return jsonResponse(getBusySlots(e.parameter))
-      case 'createEvent':
-        return jsonResponse(createEvent(body))
-      case 'cancelEvent':
-        return jsonResponse(cancelEvent(body))
-      case 'getBookings':
-        return jsonResponse(getBookings(e.parameter))
-      case 'getAllBookings':
-        return jsonResponse(getAllBookings(e.parameter))
+      case 'getBusySlots':   result = getBusySlots(e.parameter); break
+      case 'createEvent':    result = createEvent(body);         break
+      case 'cancelEvent':    result = cancelEvent(body);         break
+      case 'getBookings':    result = getBookings(e.parameter);  break
+      case 'getAllBookings':  result = getAllBookings(e.parameter); break
+      case 'diagnostics':    result = getDiagnostics();          break
       default:
-        return jsonResponse({ error: `Unknown action: ${action}` }, 400)
+        result = { ok: false, error: `Unknown action: ${action}`, code: 'ERR_UNKNOWN_ACTION' }
     }
+
+    // Structured log — visible in GAS editor: View → Executions (or Stackdriver)
+    Logger.log(JSON.stringify({
+      ts, action,
+      ok:   result.ok !== false,
+      code: result.code || null,
+      err:  result.error || null,
+    }))
+
+    return jsonResponse(result)
   } catch (err) {
-    Logger.log('Error in handleRequest: ' + err.message + '\n' + err.stack)
-    return jsonResponse({ error: err.message }, 500)
+    Logger.log(JSON.stringify({ ts, action, ok: false, code: 'ERR_EXCEPTION', err: err.message, stack: err.stack }))
+    return jsonResponse({ ok: false, error: err.message, code: 'ERR_EXCEPTION' }, 500)
+  }
+}
+
+/**
+ * Quick health-check / config dump — hit ?action=diagnostics to verify the live deployment.
+ * Returns the script's configured timezone, working hours, and calendar ID (masked).
+ */
+function getDiagnostics() {
+  return {
+    ok:          true,
+    ts:          new Date().toISOString(),
+    tz:          OWNER_TZ,
+    workHours:   WORKING_HOURS,
+    workDays:    'Sun–Fri (0–5)',
+    calendarId:  OWNER_CALENDAR_ID.replace(/@.*/, '@…'),   // masked for safety
+    bufferMins:  BUFFER_MINS,
+    minNoticeH:  MIN_NOTICE_HOURS,
   }
 }
 
@@ -154,10 +179,12 @@ function getBusySlots(params) {
     throw new Error('date param required (YYYY-MM-DD)')
   }
 
-  // Build start/end of the day in OWNER_TZ
+  // Build start/end of the day in the script's timezone (Asia/Jerusalem, set in appsscript.json).
+  // Using the local Date constructor (not Date.UTC) lets GAS interpret the date in OWNER_TZ,
+  // so midnight means midnight Israel time, not UTC midnight.
   const [year, mon, day] = dateStr.split('-').map(Number)
-  const dayStart = new Date(Date.UTC(year, mon - 1, day, 0, 0, 0))
-  const dayEnd   = new Date(Date.UTC(year, mon - 1, day, 23, 59, 59))
+  const dayStart = new Date(year, mon - 1, day, 0, 0, 0)
+  const dayEnd   = new Date(year, mon - 1, day, 23, 59, 59)
 
   // Shift from UTC to OWNER_TZ (approximate — GAS CalendarApp uses the script's tz)
   const calendar = CalendarApp.getCalendarById(OWNER_CALENDAR_ID)
@@ -218,7 +245,7 @@ function createEvent(body) {
   }
 
   if (locationMode === 'in_person' && !meetingLocation.trim()) {
-    return { ok: false, error: 'Meeting address is required for in-person meetings.' }
+    return { ok: false, error: 'Meeting address is required for in-person meetings.', code: 'ERR_NO_ADDRESS' }
   }
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -229,13 +256,13 @@ function createEvent(body) {
 
   // ── Working-day check (Sun–Fri only, no Saturdays) ───────
   if (startTime.getUTCDay() === 6) {
-    return { ok: false, error: 'Meetings are not available on Saturdays.' }
+    return { ok: false, error: 'Meetings are not available on Saturdays.', code: 'ERR_SATURDAY' }
   }
 
   // ── Minimum notice check ─────────────────────────────────
   const minNoticeMs = MIN_NOTICE_HOURS * 60 * 60 * 1000
   if (startTime.getTime() - Date.now() < minNoticeMs) {
-    return { ok: false, error: `Must book at least ${MIN_NOTICE_HOURS} hours in advance` }
+    return { ok: false, error: `Must book at least ${MIN_NOTICE_HOURS} hours in advance`, code: 'ERR_MIN_NOTICE' }
   }
 
   // ── Idempotency check ────────────────────────────────────
@@ -261,9 +288,10 @@ function createEvent(body) {
   const checkFrom = new Date(startTime.getTime() - bufMs)
   const checkTo   = new Date(endTime.getTime()   + bufMs)
   const conflicts = calendar.getEvents(checkFrom, checkTo)
+    .filter(e => !e.isAllDayEvent())   // all-day events (holidays, OOO) must not block slots
 
   if (conflicts.length > 0) {
-    return { ok: false, error: 'Time slot is no longer available. Please pick another.' }
+    return { ok: false, error: 'Time slot is no longer available. Please pick another.', code: 'ERR_SLOT_TAKEN' }
   }
 
   // ── Build event description ───────────────────────────────
@@ -298,6 +326,7 @@ function createEvent(body) {
     },
   }
 
+  // Virtual / hybrid: attach a Google Meet conference request
   if (!isInPerson) {
     eventResource.conferenceData = {
       createRequest: {
@@ -305,7 +334,9 @@ function createEvent(body) {
         conferenceSolutionKey: { type: 'hangoutsMeet' },
       },
     }
-  } else if (meetingLocation) {
+  }
+  // Physical address: in_person uses it exclusively; hybrid uses it alongside Meet
+  if (meetingLocation) {
     eventResource.location = meetingLocation
   }
 
@@ -316,7 +347,9 @@ function createEvent(body) {
     { conferenceDataVersion: conferenceVersion, sendUpdates: 'all' }
   )
 
-  const meetLink = isInPerson
+  // Google sometimes provisions Meet links asynchronously — entryPoints may be empty right
+  // after insert. Retry once with a 2-second delay for virtual/hybrid meetings.
+  let meetLink = isInPerson
     ? null
     : (
         createdEvent.conferenceData
@@ -325,6 +358,20 @@ function createEvent(body) {
           ? createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video').uri
           : null
       )
+
+  if (!meetLink && !isInPerson) {
+    Utilities.sleep(2000)
+    try {
+      const evt2 = Calendar.Events.get(OWNER_CALENDAR_ID, createdEvent.id)
+      const eps2 = evt2.conferenceData && evt2.conferenceData.entryPoints
+      if (eps2) {
+        const vep = eps2.find(ep => ep.entryPointType === 'video')
+        if (vep && vep.uri) meetLink = vep.uri
+      }
+    } catch (e) {
+      Logger.log('Meet link retry failed: ' + e.message)
+    }
+  }
 
   // Log the confirmed booking to Google Sheets (non-blocking)
   logBookingToSheet({

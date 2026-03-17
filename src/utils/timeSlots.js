@@ -59,27 +59,27 @@ export function generateAvailableSlots(date, busySlots, userTz, duration = 30) {
 
 function pad(n) { return String(n).padStart(2, '0') }
 
-/** Format a JS Date in a given IANA timezone as "HH:MM" (12-hour with AM/PM) */
+/** Format a JS Date in a given IANA timezone as "HH:MM" (24-hour) */
 export function formatInTz(date, tz) {
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('en-GB', {
     timeZone:    tz,
-    hour:        'numeric',
+    hour:        '2-digit',
     minute:      '2-digit',
-    hour12:      true,
+    hour12:      false,
   }).format(date)
 }
 
-/** Format date + time in a given tz, e.g. "Mon, Jan 15 at 10:00 AM" */
+/** Format date + time in a given tz, e.g. "Mon, Jan 15, 14:30" */
 export function formatDateTimeInTz(isoString, tz) {
   const date = new Date(isoString)
-  return new Intl.DateTimeFormat('en-US', {
+  return new Intl.DateTimeFormat('en-GB', {
     timeZone:  tz,
     weekday:   'short',
     month:     'short',
     day:       'numeric',
-    hour:      'numeric',
+    hour:      '2-digit',
     minute:    '2-digit',
-    hour12:    true,
+    hour12:    false,
   }).format(date)
 }
 
@@ -112,8 +112,10 @@ function parseInTz(localStr, tz) {
   const get = (type) => parts.find(p => p.type === type)?.value || '00'
   const tzStr = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`
 
-  // Compute the offset
-  const tzDate   = new Date(tzStr + 'Z')
-  const diff     = approxUtc - tzDate              // milliseconds offset
-  return new Date(approxUtc.getTime() - diff)
+  // Compute the offset between our naive UTC guess and what that UTC instant looks like in tz.
+  // diff is negative for positive-offset zones (e.g. Jerusalem UTC+2: diff = −2h).
+  // Adding diff to approxUtc moves it in the right direction to get the true UTC instant.
+  const tzDate = new Date(tzStr + 'Z')
+  const diff   = approxUtc - tzDate              // milliseconds offset
+  return new Date(approxUtc.getTime() + diff)   // ← was (- diff), which was wrong
 }

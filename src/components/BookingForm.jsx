@@ -7,14 +7,10 @@ import AddressAutocomplete from './AddressAutocomplete.jsx'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
-export default function BookingForm({ selectedSlot, meetingType, userTz, onSubmit, onBack, lang = 'en' }) {
-  const [form, setForm] = useState({
-    name:            '',
-    email:           '',
-    subject:         '',
-    locationMode:    meetingType.defaultMode,
-    meetingLocation: '',
-  })
+export default function BookingForm({ selectedSlot, meetingType, userTz, formData, onChange, onSubmit, onBack, lang = 'en' }) {
+  // form state is lifted to App.jsx (formData + onChange) so it survives back navigation
+  const form    = formData
+  const setForm = onChange
   const [errors,     setErrors]     = useState({})
   const [submitting, setSubmitting] = useState(false)
   const [apiError,   setApiError]   = useState(null)
