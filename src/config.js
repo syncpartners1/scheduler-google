@@ -7,6 +7,9 @@
  *  3. Update OWNER_NAME / OWNER_TZ if needed
  */
 
+// ── Google Maps API key (for Places address autocomplete) ─────────────────────
+export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+
 // ── GAS Backend URL ──────────────────────────────────────────────────────────
 // Override in production via the VITE_GAS_URL environment variable.
 // The fallback below is the deployed Google Apps Script Web App.
@@ -17,13 +20,16 @@ export const GAS_URL =
 // ── Owner / Calendar settings ────────────────────────────────────────────────
 export const OWNER_NAME      = import.meta.env.VITE_OWNER_NAME      || 'Adi Ben-Nesher'
 export const OWNER_PHOTO_URL = import.meta.env.VITE_OWNER_PHOTO_URL || '/adi.png'
-export const OWNER_TZ        = 'Asia/Jerusalem'   // owner's timezone (Israel)
+export const OWNER_TZ        = 'UTC'   // owner's timezone (GMT/UTC)
 
 // ── Working hours (in OWNER_TZ) ──────────────────────────────────────────────
 export const WORKING_HOURS = {
   start: 9,   // 09:00
-  end:   18,  // 18:00
+  end:   21,  // 21:00
 }
+
+// ── Working days (JS getDay(): 0=Sun … 6=Sat) ────────────────────────────────
+export const WORKING_DAYS = [0, 1, 2, 3, 4, 5]  // Sun–Fri (no Saturday)
 
 // ── Slot options (minutes) ───────────────────────────────────────────────────
 // Kept for any code that still references it; meeting type durations are the source of truth.

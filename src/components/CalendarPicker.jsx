@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { MAX_DAYS_AHEAD } from '../config.js'
+import { MAX_DAYS_AHEAD, WORKING_DAYS } from '../config.js'
 import { t } from '../i18n.js'
 
 function startOfDay(date) {
@@ -64,7 +64,7 @@ export default function CalendarPicker({ onSelect, lang = 'en' }) {
 
   const isDisabled = (day) => {
     const d = new Date(year, month, day)
-    return d < today || d > maxDate
+    return d < today || d > maxDate || !WORKING_DAYS.includes(d.getDay())
   }
 
   const isToday = (day) =>

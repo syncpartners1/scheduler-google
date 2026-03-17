@@ -3,6 +3,7 @@ import { ChevronLeft, Loader2, User, Mail, MessageSquare, Video, Globe2, MapPin,
 import { formatDateTimeInTz } from '../utils/timeSlots.js'
 import { OWNER_TZ } from '../config.js'
 import { t } from '../i18n.js'
+import AddressAutocomplete from './AddressAutocomplete.jsx'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
@@ -178,26 +179,21 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, onSubmi
           </div>
         </div>
 
-        {/* Address — shown only for in-person */}
-        {form.locationMode === 'in_person' && (
+        {/* Address — shown for in-person and hybrid */}
+        {(form.locationMode === 'in_person' || form.locationMode === 'hybrid') && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t(lang, 'meeting_address')}</label>
-            <div className="relative">
-              <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                value={form.meetingLocation}
-                onChange={handleChange('meetingLocation')}
-                placeholder={t(lang, 'addr_placeholder')}
-                disabled={submitting}
-                className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm transition
-                  focus:outline-none focus:ring-2 focus:ring-brand-300
-                  ${errors.meetingLocation
-                    ? 'border-red-300 bg-red-50 focus:ring-red-200'
-                    : 'border-gray-200 focus:border-brand-400'
-                  }`}
-              />
-            </div>
+            <AddressAutocomplete
+              key={form.locationMode}
+              value={form.meetingLocation}
+              onChange={addr => {
+                setForm(prev => ({ ...prev, meetingLocation: addr }))
+                if (errors.meetingLocation) setErrors(prev => ({ ...prev, meetingLocation: undefined }))
+              }}
+              placeholder={t(lang, 'addr_placeholder')}
+              disabled={submitting}
+              hasError={!!errors.meetingLocation}
+            />
             {errors.meetingLocation && (
               <p className="text-xs text-red-500 mt-1">{errors.meetingLocation}</p>
             )}
