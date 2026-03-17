@@ -12,9 +12,10 @@
  *  1. Go to https://script.google.com → click "New project"
  *  2. Delete any existing code and paste this entire file
  *  3. Set OWNER_CALENDAR_ID below (usually your Gmail address)
- *  4. Enable the Calendar Advanced Service:
- *       Extensions → Apps Script → Services (+)
- *       Find "Google Calendar API" → Add → OK
+ *  4. Ensure Google Calendar API v3 and Google Meet API are enabled in the
+ *       GCP project (APIs & Services → Enable APIs).
+ *       The Calendar Advanced Service is declared in appsscript.json and
+ *       activates automatically on deployment via clasp or the browser editor.
  *  5. (Optional) Set up Google Sheet booking log:
  *       a. Create a new Google Sheet at https://sheets.google.com
  *       b. Copy its ID from the URL (the long string between /d/ and /edit)
@@ -51,10 +52,10 @@
 const OWNER_CALENDAR_ID = 'syncpartners1@gmail.com'
 
 /** Timezone for your working hours (IANA format). */
-const OWNER_TZ = 'Asia/Jerusalem'
+const OWNER_TZ = 'UTC'
 
 /** Working hours in OWNER_TZ (24-hour, inclusive start, exclusive end). */
-const WORKING_HOURS = { start: 9, end: 18 }
+const WORKING_HOURS = { start: 9, end: 21 }
 
 /** Buffer added before and after each existing event (minutes). */
 const BUFFER_MINS = 15
@@ -226,6 +227,11 @@ function createEvent(body) {
   const startTime = new Date(startISO)
   const endTime   = new Date(startTime.getTime() + Number(duration) * 60 * 1000)
 
+  // ── Working-day check (Sun–Fri only, no Saturdays) ───────
+  if (startTime.getUTCDay() === 6) {
+    return { ok: false, error: 'Meetings are not available on Saturdays.' }
+  }
+
   // ── Minimum notice check ─────────────────────────────────
   const minNoticeMs = MIN_NOTICE_HOURS * 60 * 60 * 1000
   if (startTime.getTime() - Date.now() < minNoticeMs) {
@@ -317,7 +323,7 @@ function createEvent(body) {
         && createdEvent.conferenceData.entryPoints
         && createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video')
           ? createdEvent.conferenceData.entryPoints.find(ep => ep.entryPointType === 'video').uri
-          : 'https://meet.google.com'
+          : null
       )
 
   // Log the confirmed booking to Google Sheets (non-blocking)
@@ -716,15 +722,29 @@ function findEventByRequestId(requestId, startTime) {
 
 /**
  * Extract a Google Meet video link from a CalendarApp Event object.
+ * Primary: Calendar REST API (Advanced Service) reads conferenceData.entryPoints.
+ * Fallback: location field heuristic, then description regex.
+ * Returns null if no Meet link can be found.
  */
 function getMeetLinkFromEvent(event) {
-  // CalendarApp Event objects don't expose conferenceData directly,
-  // so we fall back to checking the location field (GAS sets it).
+  // CalendarApp.Event.getId() returns IDs like "abc123@google.com".
+  // The Calendar REST API only accepts the base ID — strip the suffix.
+  try {
+    const baseId    = event.getId().replace(/@google\.com$/, '')
+    const restEvent = Calendar.Events.get(OWNER_CALENDAR_ID, baseId)
+    const eps       = restEvent.conferenceData && restEvent.conferenceData.entryPoints
+    if (eps) {
+      const videoEp = eps.find(ep => ep.entryPointType === 'video')
+      if (videoEp && videoEp.uri) return videoEp.uri
+    }
+  } catch (e) {
+    Logger.log('getMeetLinkFromEvent: REST lookup failed, falling back. ' + e.message)
+  }
+
   const loc = event.getLocation() || ''
   if (loc.startsWith('https://meet.google.com')) return loc
 
-  // Try parsing from description
-  const desc = event.getDescription() || ''
+  const desc  = event.getDescription() || ''
   const match = desc.match(/https:\/\/meet\.google\.com\/[a-z-]+/)
-  return match ? match[0] : 'https://meet.google.com'
+  return match ? match[0] : null
 }
