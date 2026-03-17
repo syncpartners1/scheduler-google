@@ -112,7 +112,11 @@ export default function App() {
       body:   JSON.stringify(body),
     })
     const data = await res.json()
-    if (!data.ok) throw new Error(data.error || 'Booking failed')
+    if (!data.ok) {
+      const msg  = data.error || 'Booking failed'
+      const code = data.code  ? ` [${data.code}]` : ''
+      throw new Error(msg + code)
+    }
 
     const confirmed = {
       name, email, subject,

@@ -101,25 +101,50 @@ function doPost(e) {
 
 function handleRequest(e, body) {
   const action = (e.parameter && e.parameter.action) || (body && body.action)
+  const ts     = new Date().toISOString()
 
   try {
+    let result
     switch (action) {
-      case 'getBusySlots':
-        return jsonResponse(getBusySlots(e.parameter))
-      case 'createEvent':
-        return jsonResponse(createEvent(body))
-      case 'cancelEvent':
-        return jsonResponse(cancelEvent(body))
-      case 'getBookings':
-        return jsonResponse(getBookings(e.parameter))
-      case 'getAllBookings':
-        return jsonResponse(getAllBookings(e.parameter))
+      case 'getBusySlots':   result = getBusySlots(e.parameter); break
+      case 'createEvent':    result = createEvent(body);         break
+      case 'cancelEvent':    result = cancelEvent(body);         break
+      case 'getBookings':    result = getBookings(e.parameter);  break
+      case 'getAllBookings':  result = getAllBookings(e.parameter); break
+      case 'diagnostics':    result = getDiagnostics();          break
       default:
-        return jsonResponse({ error: `Unknown action: ${action}` }, 400)
+        result = { ok: false, error: `Unknown action: ${action}`, code: 'ERR_UNKNOWN_ACTION' }
     }
+
+    // Structured log — visible in GAS editor: View → Executions (or Stackdriver)
+    Logger.log(JSON.stringify({
+      ts, action,
+      ok:   result.ok !== false,
+      code: result.code || null,
+      err:  result.error || null,
+    }))
+
+    return jsonResponse(result)
   } catch (err) {
-    Logger.log('Error in handleRequest: ' + err.message + '\n' + err.stack)
-    return jsonResponse({ error: err.message }, 500)
+    Logger.log(JSON.stringify({ ts, action, ok: false, code: 'ERR_EXCEPTION', err: err.message, stack: err.stack }))
+    return jsonResponse({ ok: false, error: err.message, code: 'ERR_EXCEPTION' }, 500)
+  }
+}
+
+/**
+ * Quick health-check / config dump — hit ?action=diagnostics to verify the live deployment.
+ * Returns the script's configured timezone, working hours, and calendar ID (masked).
+ */
+function getDiagnostics() {
+  return {
+    ok:          true,
+    ts:          new Date().toISOString(),
+    tz:          OWNER_TZ,
+    workHours:   WORKING_HOURS,
+    workDays:    'Sun–Fri (0–5)',
+    calendarId:  OWNER_CALENDAR_ID.replace(/@.*/, '@…'),   // masked for safety
+    bufferMins:  BUFFER_MINS,
+    minNoticeH:  MIN_NOTICE_HOURS,
   }
 }
 
@@ -220,7 +245,7 @@ function createEvent(body) {
   }
 
   if (locationMode === 'in_person' && !meetingLocation.trim()) {
-    return { ok: false, error: 'Meeting address is required for in-person meetings.' }
+    return { ok: false, error: 'Meeting address is required for in-person meetings.', code: 'ERR_NO_ADDRESS' }
   }
 
   const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -231,13 +256,13 @@ function createEvent(body) {
 
   // ── Working-day check (Sun–Fri only, no Saturdays) ───────
   if (startTime.getUTCDay() === 6) {
-    return { ok: false, error: 'Meetings are not available on Saturdays.' }
+    return { ok: false, error: 'Meetings are not available on Saturdays.', code: 'ERR_SATURDAY' }
   }
 
   // ── Minimum notice check ─────────────────────────────────
   const minNoticeMs = MIN_NOTICE_HOURS * 60 * 60 * 1000
   if (startTime.getTime() - Date.now() < minNoticeMs) {
-    return { ok: false, error: `Must book at least ${MIN_NOTICE_HOURS} hours in advance` }
+    return { ok: false, error: `Must book at least ${MIN_NOTICE_HOURS} hours in advance`, code: 'ERR_MIN_NOTICE' }
   }
 
   // ── Idempotency check ────────────────────────────────────
@@ -266,7 +291,7 @@ function createEvent(body) {
     .filter(e => !e.isAllDayEvent())   // all-day events (holidays, OOO) must not block slots
 
   if (conflicts.length > 0) {
-    return { ok: false, error: 'Time slot is no longer available. Please pick another.' }
+    return { ok: false, error: 'Time slot is no longer available. Please pick another.', code: 'ERR_SLOT_TAKEN' }
   }
 
   // ── Build event description ───────────────────────────────
@@ -301,6 +326,7 @@ function createEvent(body) {
     },
   }
 
+  // Virtual / hybrid: attach a Google Meet conference request
   if (!isInPerson) {
     eventResource.conferenceData = {
       createRequest: {
@@ -308,7 +334,9 @@ function createEvent(body) {
         conferenceSolutionKey: { type: 'hangoutsMeet' },
       },
     }
-  } else if (meetingLocation) {
+  }
+  // Physical address: in_person uses it exclusively; hybrid uses it alongside Meet
+  if (meetingLocation) {
     eventResource.location = meetingLocation
   }
 
