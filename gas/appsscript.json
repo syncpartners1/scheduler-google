@@ -5,13 +5,15 @@
     "executeAs": "USER_DEPLOYING",
     "access": "ANYONE_ANONYMOUS"
   },
-  "enabledAdvancedServices": [
-    {
-      "userSymbol": "Calendar",
-      "serviceId": "calendar",
-      "version": "v3"
-    }
-  ],
+  "dependencies": {
+    "enabledAdvancedServices": [
+      {
+        "userSymbol": "Calendar",
+        "serviceId": "calendar",
+        "version": "v3"
+      }
+    ]
+  },
   "oauthScopes": [
     "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/spreadsheets",
