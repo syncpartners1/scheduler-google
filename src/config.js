@@ -7,6 +7,9 @@
  *  3. Update OWNER_NAME / OWNER_TZ if needed
  */
 
+// ── Google Maps API key (for Places address autocomplete) ─────────────────────
+export const GOOGLE_MAPS_API_KEY = import.meta.env.VITE_GOOGLE_MAPS_API_KEY || ''
+
 // ── GAS Backend URL ──────────────────────────────────────────────────────────
 // Override in production via the VITE_GAS_URL environment variable.
 // The fallback below is the deployed Google Apps Script Web App.
