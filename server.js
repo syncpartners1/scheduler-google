@@ -31,7 +31,7 @@ const API_KEY   = process.env.API_KEY || ''
 // ── Slot generation (mirrors src/utils/timeSlots.js) ────────────────────────
 
 const OWNER_TZ       = 'Asia/Jerusalem'
-const WORKING_HOURS  = { start: 9, end: 18 }
+const WORKING_HOURS  = { start: 9, end: 21 }
 const BUFFER_MINS    = 15
 const MIN_NOTICE_HRS = 2
 
@@ -47,7 +47,7 @@ function parseInTz(localStr, tz) {
   const get  = (t) => parts.find(p => p.type === t)?.value || '00'
   const tzStr = `${get('year')}-${get('month')}-${get('day')}T${get('hour')}:${get('minute')}:${get('second')}`
   const diff  = approxUtc - new Date(tzStr + 'Z')
-  return new Date(approxUtc.getTime() - diff)
+  return new Date(approxUtc.getTime() + diff)
 }
 
 /** Format a UTC Date as "9:00 AM" in the given IANA timezone */
@@ -72,10 +72,10 @@ function generateAvailableSlots(dateStr, busySlots, userTz, duration) {
   const workStart = parseInTz(`${dateStr}T${pad(WORKING_HOURS.start)}:00:00`, OWNER_TZ)
   const workEnd   = parseInTz(`${dateStr}T${pad(WORKING_HOURS.end)}:00:00`,   OWNER_TZ)
 
-  // Busy blocks are already buffered by GAS; add client-side buffer on top
+  // Busy blocks are already buffered by GAS — use them directly.
   const busy = busySlots.map(b => ({
-    start: new Date(new Date(b.start).getTime() - BUFFER_MINS * 60 * 1000),
-    end:   new Date(new Date(b.end).getTime()   + BUFFER_MINS * 60 * 1000),
+    start: new Date(b.start),
+    end:   new Date(b.end),
   }))
 
   let cursor = new Date(workStart)
