@@ -99,19 +99,37 @@ function doPost(e) {
   return handleRequest(e, body)
 }
 
+/**
+ * Run this function manually from the GAS editor to (re-)authorize
+ * the script's access to Google Calendar.
+ *
+ * Steps:
+ *  1. Select "triggerAuth" in the function dropdown (top toolbar)
+ *  2. Click ▶ Run
+ *  3. Click "Review permissions" → choose syncpartners1@gmail.com → Allow
+ *  4. After it runs successfully, re-deploy: Deploy → Manage deployments
+ *     → Edit (pencil) → New version → Deploy
+ */
+function triggerAuth() {
+  const cal = CalendarApp.getCalendarById(OWNER_CALENDAR_ID)
+  if (!cal) throw new Error('Calendar not found: ' + OWNER_CALENDAR_ID)
+  Logger.log('Auth OK — calendar name: ' + cal.getName())
+}
+
 function handleRequest(e, body) {
-  const action = (e.parameter && e.parameter.action) || (body && body.action)
+  const params = (e && e.parameter) || {}
+  const action = params.action || (body && body.action)
   const ts     = new Date().toISOString()
 
   try {
     let result
     switch (action) {
-      case 'getBusySlots':   result = getBusySlots(e.parameter); break
-      case 'createEvent':    result = createEvent(body);         break
-      case 'cancelEvent':    result = cancelEvent(body);         break
-      case 'getBookings':    result = getBookings(e.parameter);  break
-      case 'getAllBookings':  result = getAllBookings(e.parameter); break
-      case 'diagnostics':    result = getDiagnostics();          break
+      case 'getBusySlots':   result = getBusySlots(params); break
+      case 'createEvent':    result = createEvent(body);    break
+      case 'cancelEvent':    result = cancelEvent(body);    break
+      case 'getBookings':    result = getBookings(params);  break
+      case 'getAllBookings':  result = getAllBookings(params); break
+      case 'diagnostics':    result = getDiagnostics();     break
       default:
         result = { ok: false, error: `Unknown action: ${action}`, code: 'ERR_UNKNOWN_ACTION' }
     }
