@@ -23,10 +23,10 @@ export function generateAvailableSlots(date, busySlots, userTz, duration = 30) {
   const workStart = parseInTz(`${dateStr}T${pad(WORKING_HOURS.start)}:00:00`, OWNER_TZ)
   const workEnd   = parseInTz(`${dateStr}T${pad(WORKING_HOURS.end  )}:00:00`, OWNER_TZ)
 
-  // Expand busy slots with buffer
+  // Busy slots are already buffered by GAS — use them directly.
   const busy = busySlots.map(b => ({
-    start: new Date(new Date(b.start).getTime() - BUFFER_MINS * 60 * 1000),
-    end:   new Date(new Date(b.end  ).getTime() + BUFFER_MINS * 60 * 1000),
+    start: new Date(b.start),
+    end:   new Date(b.end),
   }))
 
   let cursor = new Date(workStart)
