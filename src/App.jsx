@@ -79,7 +79,7 @@ export default function App() {
       setBusySlots(data.busySlots || [])
     } catch (err) {
       console.error('[slots] fetchBusySlots failed:', err)
-      setSlotsError('Could not load availability. Please try again.')
+      setSlotsError(`Could not load availability: ${err.message}`)
     } finally {
       setSlotsLoading(false)
     }

@@ -138,8 +138,20 @@ function requireApiKey(req, res, next) {
  * GET /api/health
  * Quick liveness check.
  */
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, status: 'running', ts: new Date().toISOString() })
+app.get('/api/health', async (req, res) => {
+  const result = { ok: true, status: 'running', ts: new Date().toISOString(), gas: null }
+  if (GAS_URL) {
+    try {
+      const gasRes = await fetch(`${GAS_URL}?action=diagnostics`, { signal: AbortSignal.timeout(8000) })
+      const text   = await gasRes.text()
+      try { result.gas = JSON.parse(text) } catch (_) { result.gas = { ok: false, error: 'Non-JSON: ' + text.slice(0, 120) } }
+    } catch (err) {
+      result.gas = { ok: false, error: err.message }
+    }
+  } else {
+    result.gas = { ok: false, error: 'GAS_URL not set' }
+  }
+  res.json(result)
 })
 
 /**
@@ -274,6 +286,26 @@ app.get('/api/bookings', requireApiKey, async (req, res) => {
 })
 
 /**
+ * GET /api/test-gas
+ * Public diagnostic: calls GAS ?action=diagnostics and returns raw result.
+ * Useful for quickly checking if GAS is reachable and authorized.
+ */
+app.get('/api/test-gas', async (req, res) => {
+  if (!GAS_URL) return res.json({ ok: false, error: 'GAS_URL not configured on server' })
+  try {
+    const gasRes = await fetch(`${GAS_URL}?action=diagnostics`, { signal: AbortSignal.timeout(10000) })
+    const text   = await gasRes.text()
+    let parsed
+    try { parsed = JSON.parse(text) } catch (_) {
+      parsed = { ok: false, raw: text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300) }
+    }
+    res.json({ gasUrl: GAS_URL.slice(0, 60) + '…', httpStatus: gasRes.status, response: parsed })
+  } catch (err) {
+    res.json({ ok: false, error: err.message })
+  }
+})
+
+/**
  * GET /api/public/slots?date=YYYY-MM-DD&tz=...&duration=30
  *
  * Public (no API key required) proxy for the React booking UI.
@@ -288,9 +320,18 @@ app.get('/api/public/slots', async (req, res) => {
   }
   if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
   try {
-    const params = new URLSearchParams({ action: 'getBusySlots', date, tz, duration })
-    const gasRes = await fetch(`${GAS_URL}?${params}`)
-    const data   = await gasRes.json()
+    const params  = new URLSearchParams({ action: 'getBusySlots', date, tz, duration })
+    const gasRes  = await fetch(`${GAS_URL}?${params}`, { signal: AbortSignal.timeout(15000) })
+    const rawText = await gasRes.text()
+
+    // GAS sometimes returns HTML (auth/quota page) instead of JSON.
+    // Detect this early and return a clear error instead of a JSON-parse crash.
+    let data
+    try { data = JSON.parse(rawText) } catch (_) {
+      const snippet = rawText.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120)
+      return res.status(502).json({ ok: false, error: `GAS returned non-JSON: ${snippet}` })
+    }
+
     if (data.error) return res.status(502).json({ ok: false, error: data.error })
     res.json({ ok: true, busySlots: data.busySlots || [] })
   } catch (err) {
