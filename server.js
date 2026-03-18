@@ -138,8 +138,20 @@ function requireApiKey(req, res, next) {
  * GET /api/health
  * Quick liveness check.
  */
-app.get('/api/health', (req, res) => {
-  res.json({ ok: true, status: 'running', ts: new Date().toISOString() })
+app.get('/api/health', async (req, res) => {
+  const result = { ok: true, status: 'running', ts: new Date().toISOString(), gas: null }
+  if (GAS_URL) {
+    try {
+      const gasRes = await fetch(`${GAS_URL}?action=diagnostics`, { signal: AbortSignal.timeout(8000) })
+      const text   = await gasRes.text()
+      try { result.gas = JSON.parse(text) } catch (_) { result.gas = { ok: false, error: 'Non-JSON: ' + text.slice(0, 120) } }
+    } catch (err) {
+      result.gas = { ok: false, error: err.message }
+    }
+  } else {
+    result.gas = { ok: false, error: 'GAS_URL not set' }
+  }
+  res.json(result)
 })
 
 /**
