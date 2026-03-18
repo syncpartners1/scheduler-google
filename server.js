@@ -274,6 +274,71 @@ app.get('/api/bookings', requireApiKey, async (req, res) => {
 })
 
 /**
+ * GET /api/public/slots?date=YYYY-MM-DD&tz=...&duration=30
+ *
+ * Public (no API key required) proxy for the React booking UI.
+ * Returns raw busy slots from GAS so the client-side slot generator can use them.
+ *
+ * Response: { ok: true, busySlots: [{start: ISO, end: ISO}] }
+ */
+app.get('/api/public/slots', async (req, res) => {
+  const { date, tz = 'UTC', duration = '30' } = req.query
+  if (!date || !/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    return res.status(400).json({ ok: false, error: 'date param required (YYYY-MM-DD)' })
+  }
+  if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
+  try {
+    const params = new URLSearchParams({ action: 'getBusySlots', date, tz, duration })
+    const gasRes = await fetch(`${GAS_URL}?${params}`)
+    const data   = await gasRes.json()
+    if (data.error) return res.status(502).json({ ok: false, error: data.error })
+    res.json({ ok: true, busySlots: data.busySlots || [] })
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message })
+  }
+})
+
+/**
+ * POST /api/public/book
+ *
+ * Public (no API key required) proxy for the React booking UI.
+ * Forwards to GAS createEvent server-side (avoids browser CORS preflight issues).
+ *
+ * Body: { name, email, subject, startISO, duration, userTz,
+ *         meetingTypeId?, meetingTypeLabel?, locationMode?, location?, requestId? }
+ * Response: { ok: true, meetLink, eventId, startISO, endISO }
+ */
+app.post('/api/public/book', async (req, res) => {
+  const { name, email, subject, startISO, duration, userTz,
+          meetingTypeId, meetingTypeLabel, locationMode, location, requestId } = req.body
+  if (!name || !email || !startISO || !duration) {
+    return res.status(400).json({ ok: false, error: 'Missing required fields: name, email, startISO, duration' })
+  }
+  if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
+  try {
+    const gasRes = await fetch(GAS_URL, {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify({
+        action: 'createEvent',
+        name, email, subject, startISO, duration,
+        userTz:           userTz           || 'UTC',
+        meetingTypeId:    meetingTypeId    || '',
+        meetingTypeLabel: meetingTypeLabel || '',
+        locationMode:     locationMode     || 'virtual',
+        location:         location         || '',
+        requestId:        requestId        || `${email}-${startISO}-${Date.now()}`,
+      }),
+    })
+    const data = await gasRes.json()
+    if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Booking failed' })
+    res.json(data)
+  } catch (err) {
+    res.status(502).json({ ok: false, error: err.message })
+  }
+})
+
+/**
  * GET /api/admin/bookings
  *
  * List all upcoming bookings (admin only).

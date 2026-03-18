@@ -56,7 +56,7 @@ export default function App() {
 
   const toggleLang = () => setLang(l => l === 'en' ? 'he' : 'en')
 
-  // Fetch busy slots from GAS whenever the selected date or meeting type changes
+  // Fetch busy slots via server-side proxy to avoid browser CORS issues with GAS
   const fetchBusySlots = useCallback(async (date, mt) => {
     if (!date) return
     setSlotsLoading(true)
@@ -67,19 +67,18 @@ export default function App() {
     const mm      = String(date.getMonth() + 1).padStart(2, '0')
     const dd      = String(date.getDate()).padStart(2, '0')
     const params  = new URLSearchParams({
-      action:   'getBusySlots',
       date:     `${yyyy}-${mm}-${dd}`,
       tz:       userTz,
       duration: String(mt.duration),
     })
 
     try {
-      const res  = await fetch(`${GAS_URL}?${params}`)
+      const res  = await fetch(`/api/public/slots?${params}`)
       const data = await res.json()
-      if (data.error) throw new Error(data.error)
+      if (!data.ok) throw new Error(data.error || 'Slots unavailable')
       setBusySlots(data.busySlots || [])
     } catch (err) {
-      console.error('[GAS] getBusySlots failed:', err)
+      console.error('[slots] fetchBusySlots failed:', err)
       setSlotsError('Could not load availability. Please try again.')
     } finally {
       setSlotsLoading(false)
@@ -95,7 +94,6 @@ export default function App() {
     const requestId = `${email}-${selectedSlot.start}-${Date.now()}`
 
     const body = {
-      action:           'createEvent',
       name, email, subject,
       startISO:         selectedSlot.start,
       duration:         meetingType.duration,
@@ -107,9 +105,10 @@ export default function App() {
       requestId,
     }
 
-    const res  = await fetch(GAS_URL, {
-      method: 'POST',
-      body:   JSON.stringify(body),
+    const res  = await fetch('/api/public/book', {
+      method:  'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body:    JSON.stringify(body),
     })
     const data = await res.json()
     if (!data.ok) {
