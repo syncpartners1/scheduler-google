@@ -718,10 +718,19 @@ function esc(s) {
 // ── Static file serving (React build) ───────────────────────────────────────
 
 const distDir = join(__dirname, 'dist')
-app.use(express.static(distDir))
+
+// Serve hashed assets (JS/CSS) with long-lived cache; never cache index.html
+app.use(express.static(distDir, {
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
+    }
+  },
+}))
 
 // SPA fallback — serve index.html for all non-API routes
 app.get('*', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
   res.sendFile(join(distDir, 'index.html'))
 })
 
