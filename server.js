@@ -213,6 +213,7 @@ app.post('/api/book', requireApiKey, async (req, res) => {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'createEvent', name, email, subject, startISO, duration, userTz, requestId }),
+      signal:  AbortSignal.timeout(20000),
     })
     const data = await gasRes.json()
     if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Booking failed' })
@@ -246,6 +247,7 @@ app.post('/api/cancel', requireApiKey, async (req, res) => {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'cancelEvent', eventId, reason: reason || '' }),
+      signal:  AbortSignal.timeout(20000),
     })
     const data = await gasRes.json()
     if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Cancellation failed' })
@@ -370,6 +372,7 @@ app.post('/api/public/book', async (req, res) => {
         location:         location         || '',
         requestId:        requestId        || `${email}-${startISO}-${Date.now()}`,
       }),
+      signal: AbortSignal.timeout(20000),
     })
     const data = await gasRes.json()
     if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Booking failed' })
@@ -421,6 +424,7 @@ app.post('/api/admin/reschedule', requireApiKey, async (req, res) => {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'cancelEvent', eventId, reason: 'Rescheduled by admin' }),
+      signal:  AbortSignal.timeout(20000),
     })
     const cancelData = await cancelRes.json()
     if (!cancelData.ok) return res.status(502).json({ ok: false, error: `Cancel failed: ${cancelData.error}` })
@@ -442,6 +446,7 @@ app.post('/api/admin/reschedule', requireApiKey, async (req, res) => {
         locationMode:     req.body.locationMode     || 'virtual',
         location:         req.body.location         || '',
       }),
+      signal: AbortSignal.timeout(20000),
     })
     const createData = await createRes.json()
     if (!createData.ok) return res.status(502).json({ ok: false, error: `Create failed: ${createData.error}` })
