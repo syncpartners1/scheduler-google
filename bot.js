@@ -49,14 +49,25 @@ function clearSession(chatId) {
 
 const HEADERS = { 'Content-Type': 'application/json', 'X-Api-Key': API_KEY }
 
+/** Fetch with a hard timeout (default 15 s) to avoid hanging on cold-start Railway sleeps. */
+async function fetchWithTimeout(url, opts = {}, timeoutMs = 15000) {
+  const ctrl = new AbortController()
+  const id   = setTimeout(() => ctrl.abort(), timeoutMs)
+  try {
+    return await fetch(url, { ...opts, signal: ctrl.signal })
+  } finally {
+    clearTimeout(id)
+  }
+}
+
 async function fetchSlots(date, tz, duration) {
   const params = new URLSearchParams({ date, tz, duration })
-  const res    = await fetch(`${SERVER_URL}/api/slots?${params}`, { headers: HEADERS })
+  const res    = await fetchWithTimeout(`${SERVER_URL}/api/slots?${params}`, { headers: HEADERS })
   return res.json()
 }
 
 async function createBooking(payload) {
-  const res = await fetch(`${SERVER_URL}/api/book`, {
+  const res = await fetchWithTimeout(`${SERVER_URL}/api/book`, {
     method:  'POST',
     headers: HEADERS,
     body:    JSON.stringify(payload),
@@ -137,18 +148,42 @@ bot.action('back:dates', (ctx) => {
   return showDatePicker(ctx)
 })
 
-// Duration selected → load + show slots
+// Common timezones offered to Telegram users
+const TZ_OPTIONS = [
+  { label: '🇮🇱 Israel (UTC+3)',    tz: 'Asia/Jerusalem' },
+  { label: '🇪🇺 Central Europe',    tz: 'Europe/Berlin'  },
+  { label: '🇬🇧 London (UTC±0/+1)', tz: 'Europe/London'  },
+  { label: '🌐 UTC',                tz: 'UTC'            },
+  { label: '🇺🇸 US Eastern',        tz: 'America/New_York' },
+  { label: '🇺🇸 US Pacific',        tz: 'America/Los_Angeles' },
+]
+
+// Duration selected → ask for timezone
 bot.action(/^dur:(\d+)$/, async (ctx) => {
   const duration = Number(ctx.match[1])
   const sess     = getSession(ctx.chat.id)
   sess.duration  = duration
 
-  // Use UTC as the default tz (user can refine via web app)
-  const userTz = 'UTC'
+  const buttons = TZ_OPTIONS.map(o => Markup.button.callback(o.label, `tz:${o.tz}`))
+  const rows    = []
+  for (let i = 0; i < buttons.length; i += 2) rows.push(buttons.slice(i, i + 2))
+  rows.push([Markup.button.callback('← Back', `date:${sess.date}`)])
+
+  await ctx.editMessageText(
+    `📅 *${formatDate(sess.date)}* · ${duration} min\n\n🌍 What's your timezone?`,
+    { parse_mode: 'Markdown', ...Markup.inlineKeyboard(rows) }
+  )
+})
+
+// Timezone selected → load + show slots
+bot.action(/^tz:(.+)$/, async (ctx) => {
+  const userTz = ctx.match[1]
+  const sess   = getSession(ctx.chat.id)
   sess.userTz  = userTz
 
   await ctx.editMessageText(`⏳ Loading available times for *${formatDate(sess.date)}*…`, { parse_mode: 'Markdown' })
 
+  const { duration } = sess
   try {
     const data = await fetchSlots(sess.date, userTz, duration)
     if (!data.ok || !data.slots?.length) {
