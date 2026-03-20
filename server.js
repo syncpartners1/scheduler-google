@@ -115,7 +115,7 @@ app.use((req, res, next) => {
   res.removeHeader('X-Frame-Options')
   res.setHeader(
     'Content-Security-Policy',
-    "frame-ancestors 'self' *.wix.com *.wixsite.com *.editorx.com"
+    "frame-ancestors 'self' *.wix.com *.wixsite.com *.editorx.com ben-nesher.com *.ben-nesher.com"
   )
   next()
 })
