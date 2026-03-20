@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Express server for the Scheduling App.
  *
  * Responsibilities:
@@ -7,10 +7,10 @@
  *     can query availability and create bookings without the browser UI.
  *
  * Environment variables:
- *  PORT           – HTTP port (Railway sets this automatically)
- *  GAS_URL        – Google Apps Script Web App URL (server-side calls)
- *  API_KEY        – Secret key for /api/* access (X-Api-Key header)
- *  ALLOWED_ORIGIN – Comma-separated origins for CORS (optional, defaults to *)
+ *  PORT           â€“ HTTP port (Railway sets this automatically)
+ *  GAS_URL        â€“ Google Apps Script Web App URL (server-side calls)
+ *  API_KEY        â€“ Secret key for /api/* access (X-Api-Key header)
+ *  ALLOWED_ORIGIN â€“ Comma-separated origins for CORS (optional, defaults to *)
  */
 
 import express           from 'express'
@@ -28,7 +28,7 @@ const GAS_URL   =
   'https://script.google.com/macros/s/AKfycbxVe7r1QIZus4kwPlWk5T6ntKO8ebAtouz6dQzRuVgVd1bhbQMX5ZbQteJIORhv0LLB/exec'
 const API_KEY   = process.env.API_KEY || ''
 
-// ── Slot generation (mirrors src/utils/timeSlots.js) ────────────────────────
+// â”€â”€ Slot generation (mirrors src/utils/timeSlots.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const OWNER_TZ       = 'Asia/Jerusalem'
 const WORKING_HOURS  = { start: 9, end: 21 }
@@ -72,7 +72,7 @@ function generateAvailableSlots(dateStr, busySlots, userTz, duration) {
   const workStart = parseInTz(`${dateStr}T${pad(WORKING_HOURS.start)}:00:00`, OWNER_TZ)
   const workEnd   = parseInTz(`${dateStr}T${pad(WORKING_HOURS.end)}:00:00`,   OWNER_TZ)
 
-  // Busy blocks are already buffered by GAS — use them directly.
+  // Busy blocks are already buffered by GAS â€” use them directly.
   const busy = busySlots.map(b => ({
     start: new Date(b.start),
     end:   new Date(b.end),
@@ -97,11 +97,11 @@ function generateAvailableSlots(dateStr, busySlots, userTz, duration) {
   return slots
 }
 
-// ── Middleware ───────────────────────────────────────────────────────────────
+// â”€â”€ Middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.use(express.json())
 
-// CORS — allow all origins by default (required for Wix iframe + external apps)
+// CORS â€” allow all origins by default (required for Wix iframe + external apps)
 app.use((req, res, next) => {
   res.setHeader('Access-Control-Allow-Origin',  '*')
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
@@ -120,7 +120,7 @@ app.use((req, res, next) => {
   next()
 })
 
-// ── API key auth middleware (applied to /api/* routes) ──────────────────────
+// â”€â”€ API key auth middleware (applied to /api/* routes) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function requireApiKey(req, res, next) {
   if (!API_KEY) return next()  // auth disabled if no key set
@@ -132,7 +132,7 @@ function requireApiKey(req, res, next) {
   next()
 }
 
-// ── REST API routes ──────────────────────────────────────────────────────────
+// â”€â”€ REST API routes â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 /**
  * GET /api/health
@@ -301,7 +301,7 @@ app.get('/api/test-gas', async (req, res) => {
     try { parsed = JSON.parse(text) } catch (_) {
       parsed = { ok: false, raw: text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300) }
     }
-    res.json({ gasUrl: GAS_URL.slice(0, 60) + '…', httpStatus: gasRes.status, response: parsed })
+    res.json({ gasUrl: GAS_URL.slice(0, 60) + 'â€¦', httpStatus: gasRes.status, response: parsed })
   } catch (err) {
     res.json({ ok: false, error: err.message })
   }
@@ -386,7 +386,7 @@ app.post('/api/public/book', async (req, res) => {
  * GET /api/admin/bookings
  *
  * List all upcoming bookings (admin only).
- * Calls GAS with action=getAllBookings — requires that action in the GAS script.
+ * Calls GAS with action=getAllBookings â€” requires that action in the GAS script.
  * Protected by X-Api-Key header or ?apiKey= query param.
  */
 app.get('/api/admin/bookings', requireApiKey, async (req, res) => {
@@ -471,7 +471,7 @@ app.get('/admin-bookings', (req, res) => {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Bookings Admin – Adi Ben-Nesher</title>
+<title>Bookings Admin â€“ Adi Ben-Nesher</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#f0f4f8;color:#111}
@@ -516,7 +516,7 @@ td{padding:10px 12px;font-size:13px;vertical-align:middle}
 <div class="hdr">
   <div>
     <div class="hdr-title">Bookings Admin</div>
-    <div style="font-size:12px;opacity:.7;margin-top:1px">Adi Ben-Nesher · Scheduler</div>
+    <div style="font-size:12px;opacity:.7;margin-top:1px">Adi Ben-Nesher Â· Scheduler</div>
   </div>
   <button id="logoutBtn" onclick="logout()" style="margin-left:auto;background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3);padding:6px 14px;border-radius:8px;font-size:12px;cursor:pointer">Sign Out</button>
 </div>
@@ -535,13 +535,13 @@ td{padding:10px 12px;font-size:13px;vertical-align:middle}
 <!-- Main screen -->
 <div id="mainScreen" class="container" style="display:none">
   <div class="section-title">Upcoming Bookings</div>
-  <p id="status">Loading…</p>
+  <p id="status">Loadingâ€¦</p>
   <div class="card">
     <table>
       <thead><tr>
         <th>Name</th><th>Email</th><th>Date & Time</th><th>Type</th><th>Format</th><th>Subject</th><th>Actions</th>
       </tr></thead>
-      <tbody id="bookingsBody"><tr><td colspan="7" style="padding:20px;color:#9ca3af;text-align:center">Loading…</td></tr></tbody>
+      <tbody id="bookingsBody"><tr><td colspan="7" style="padding:20px;color:#9ca3af;text-align:center">Loadingâ€¦</td></tr></tbody>
     </table>
   </div>
 </div>
@@ -608,16 +608,16 @@ function renderBookings(bookings) {
   tbody.innerHTML = bookings.map(b => {
     const fmt    = b.locationMode || 'virtual';
     const badge  = fmt === 'in_person' ? 'badge-inperson' : fmt === 'hybrid' ? 'badge-hybrid' : 'badge-virtual';
-    const fmtLbl = fmt === 'in_person' ? '📍 In-Person' : fmt === 'hybrid' ? '🔀 Hybrid' : '🎥 Virtual';
-    const dt     = b.startISO ? new Date(b.startISO).toLocaleString('en-IL', { timeZone:'Asia/Jerusalem', dateStyle:'medium', timeStyle:'short' }) : '—';
+    const fmtLbl = fmt === 'in_person' ? 'ðŸ“ In-Person' : fmt === 'hybrid' ? 'ðŸ”€ Hybrid' : 'ðŸŽ¥ Virtual';
+    const dt     = b.startISO ? new Date(b.startISO).toLocaleString('en-IL', { timeZone:'Asia/Jerusalem', dateStyle:'medium', timeStyle:'short' }) : 'â€”';
     return \`<tr>
-      <td style="font-weight:600">\${esc(b.name||'—')}</td>
-      <td style="color:#6b7280">\${esc(b.email||'—')}</td>
+      <td style="font-weight:600">\${esc(b.name||'â€”')}</td>
+      <td style="color:#6b7280">\${esc(b.email||'â€”')}</td>
       <td style="white-space:nowrap">\${dt}</td>
-      <td>\${esc(b.meetingTypeLabel||b.duration+'min'||'—')}</td>
+      <td>\${esc(b.meetingTypeLabel||b.duration+'min'||'â€”')}</td>
       <td><span class="badge \${badge}">\${fmtLbl}</span></td>
       <td style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="\${esc(b.subject||'')}">
-        \${esc(b.subject||'—')}</td>
+        \${esc(b.subject||'â€”')}</td>
       <td style="white-space:nowrap">
         <button class="btn btn-reschedule" onclick="openReschedule(\${JSON.stringify(b).replace(/"/g,'&quot;')})">Reschedule</button>
         <button class="btn btn-cancel"     onclick="cancelBooking('\${esc(b.eventId||'')}','\${esc(b.name||'')}')">Cancel</button>
@@ -641,8 +641,8 @@ async function cancelBooking(eventId, name) {
 
 function openReschedule(booking) {
   activeBooking = booking;
-  const dt = booking.startISO ? new Date(booking.startISO).toLocaleString('en-IL',{timeZone:'Asia/Jerusalem'}) : '—';
-  document.getElementById('modalBookingInfo').textContent = booking.name + ' — ' + dt;
+  const dt = booking.startISO ? new Date(booking.startISO).toLocaleString('en-IL',{timeZone:'Asia/Jerusalem'}) : 'â€”';
+  document.getElementById('modalBookingInfo').textContent = booking.name + ' â€” ' + dt;
   // set min date to today
   const today = new Date().toISOString().slice(0,10);
   document.getElementById('modalDate').min   = today;
@@ -662,7 +662,7 @@ async function loadModalSlots() {
   const date     = document.getElementById('modalDate').value;
   const duration = activeBooking.duration || 30;
   const grid     = document.getElementById('slotGrid');
-  grid.innerHTML = '<p style="font-size:12px;color:#9ca3af">Loading…</p>';
+  grid.innerHTML = '<p style="font-size:12px;color:#9ca3af">Loadingâ€¦</p>';
   document.getElementById('selectedNewSlot').value = '';
   try {
     const params = new URLSearchParams({ date, tz: 'Asia/Jerusalem', duration });
@@ -720,7 +720,7 @@ function esc(s) {
 </html>`)
 })
 
-// ── Static file serving (React build) ───────────────────────────────────────
+// â”€â”€ Static file serving (React build) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const distDir = join(__dirname, 'dist')
 
@@ -733,16 +733,18 @@ app.use(express.static(distDir, {
   },
 }))
 
-// SPA fallback — serve index.html for all non-API routes
+// SPA fallback â€” serve index.html for all non-API routes
 app.get('*', (req, res) => {
   res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate')
   res.sendFile(join(distDir, 'index.html'))
 })
 
-// ── Start ────────────────────────────────────────────────────────────────────
+// â”€â”€ Start â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.listen(PORT, () => {
   console.log(`Scheduling app running on port ${PORT}`)
-  if (!GAS_URL) console.warn('⚠️  GAS_URL is not set — calendar integration will not work')
-  if (!API_KEY) console.warn('⚠️  API_KEY is not set — /api/* endpoints are unprotected')
+  if (!GAS_URL) console.warn('âš ï¸  GAS_URL is not set â€” calendar integration will not work')
+  if (!API_KEY) console.warn('âš ï¸  API_KEY is not set â€” /api/* endpoints are unprotected')
 })
+
+
