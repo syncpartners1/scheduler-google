@@ -49,7 +49,7 @@
 // ─────────────────────────────────────────────────────────────
 
 /** Your Google Calendar ID. Usually your Gmail address. */
-const OWNER_CALENDAR_ID = 'syncpartners1@gmail.com'
+const OWNER_CALENDAR_ID = 'navigator.change@gmail.com'
 
 /** Timezone for your working hours (IANA format). */
 const OWNER_TZ = 'Asia/Jerusalem'
@@ -106,7 +106,7 @@ function doPost(e) {
  * Steps:
  *  1. Select "triggerAuth" in the function dropdown (top toolbar)
  *  2. Click ▶ Run
- *  3. Click "Review permissions" → choose syncpartners1@gmail.com → Allow
+ *  3. Click "Review permissions" → choose navigator.change@gmail.com → Allow
  *  4. After it runs successfully, re-deploy: Deploy → Manage deployments
  *     → Edit (pencil) → New version → Deploy
  */
