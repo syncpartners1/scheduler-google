@@ -179,3 +179,32 @@ Users chat with your bot:
 | Idempotent booking | GAS checks `requestId` in event description |
 | Email validation | Front-end regex + GAS validation |
 | `sendUpdates: 'all'` | GAS sends Google Calendar invite to both parties |
+
+## Deployment on GCP Cloud Run
+
+Production deploys from `main` through `.github/workflows/deploy-gcp.yml` using
+GitHub Workload Identity Federation. The workflow builds the React application,
+pushes the image to Artifact Registry, and deploys the public `scheduler-google`
+Cloud Run service in `me-west1` with scale-to-zero enabled.
+
+Required Secret Manager secrets:
+
+| Secret | Used as | Notes |
+|---|---|---|
+| `SCHEDULER_GOOGLE_API_KEY` | `API_KEY` | Protects admin and REST endpoints |
+| `SCHEDULER_GOOGLE_GAS_URL` | `GAS_URL` | Apps Script web-app deployment URL |
+| `SCHEDULER_GOOGLE_MAPS_API_KEY` | Vite build value | Restrict by HTTPS referrer because browser clients can see it |
+
+The existing `scheduler-sa@change-navigator-abn.iam.gserviceaccount.com` is the
+Cloud Run runtime identity. It needs Secret Manager Secret Accessor only on the
+first two secrets. The GitHub deploy identity needs access to the Maps-key secret
+at build time.
+
+The calendar operations still run in Google Apps Script, as the Google user who
+deployed that web app. Deploy `gas/Code.gs` while signed in as
+`navigator.change@gmail.com`, enable the Advanced Calendar service, authorize it,
+and save the resulting `/exec` URL in `SCHEDULER_GOOGLE_GAS_URL`.
+
+Cloud Scheduler is not used: this application is request-driven, not a cron job.
+The optional Telegram bot still uses long polling and is not started by the Cloud
+Run web image. Move it to Telegram webhooks before retiring a live Railway bot.
