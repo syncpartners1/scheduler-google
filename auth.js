@@ -91,7 +91,10 @@ export function registerAuthRoutes(app) {
       const phoneProof = await phoneVerifier.verifyNativeTelegramContact({ phone })
       await authFlowRef(flowId).update({ phoneVerified: phoneProof.verified, phoneVerificationMethod: 'telegram_native_contact' })
       res.json({ ok: true, flowId })
-    } catch (err) { res.status(400).json({ ok: false, error: err.message }) }
+    } catch (err) {
+      console.error('[auth/register/start]', err)
+      res.status(400).json({ ok: false, error: err.message })
+    }
   })
 
   app.post('/api/auth/register/verify', async (req, res) => {
@@ -146,7 +149,7 @@ export function registerAuthRoutes(app) {
 
 const REGISTRATION_HTML = `<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Change Navigator registration</title><script src="https://telegram.org/js/telegram-web-app.js"></script><style>body{font-family:system-ui;max-width:480px;margin:auto;padding:20px}input,button{width:100%;box-sizing:border-box;padding:12px;margin:6px 0}button{background:#1a2b4a;color:white;border:0;border-radius:8px}.hidden{display:none}.err{color:#b91c1c}</style></head><body><h2>Passwordless registration</h2><p>Verify your email and phone, then create a passkey. No password is used.</p><section id="details"><input id="email" type="email" placeholder="Email (your username)"><p>Your phone comes from the contact you shared with the bot.</p><button onclick="start()">Send verification codes</button></section><section id="codes" class="hidden"><input id="emailCode" inputmode="numeric" placeholder="Email code"><button onclick="verify()">Verify email and create passkey</button></section><p id="status"></p><script>
 const tg=window.Telegram.WebApp; tg.ready(); let flowId; const status=document.getElementById('status');
-const b64=b=>Uint8Array.from(atob(b.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0)); const enc=o=>{o.challenge=b64(o.challenge);o.user.id=b64(o.user.id);o.excludeCredentials=(o.excludeCredentials||[]).map(x=>({...x,id:b64(x.id)}));return o}; const out=c=>({id:c.id,rawId:buf(c.rawId),type:c.type,response:{attestationObject:buf(c.response.attestationObject),clientDataJSON:buf(c.response.clientDataJSON)},clientExtensionResults:c.getClientExtensionResults(),transports:c.response.getTransports?.()||[]}); const buf=b=>btoa(String.fromCharCode(...new Uint8Array(b))).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const b64=b=>Uint8Array.from(atob(b.replace(/-/g,'+').replace(/_/g,'/')),c=>c.charCodeAt(0)); const enc=o=>{o.challenge=b64(o.challenge);o.user.id=b64(o.user.id);o.excludeCredentials=(o.excludeCredentials||[]).map(x=>({...x,id:b64(x.id)}));return o}; const out=c=>({id:c.id,rawId:buf(c.rawId),type:c.type,response:{attestationObject:buf(c.response.attestationObject),clientDataJSON:buf(c.response.clientDataJSON)},clientExtensionResults:c.getClientExtensionResults(),transports:c.response.getTransports?.()||[]}); const buf=b=>btoa(String.fromCharCode(...new Uint8Array(b))).split('+').join('-').split('/').join('_').replace(/=+$/,'');
 async function call(url,body){const r=await fetch(url,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({...body,initData:tg.initData})});const d=await r.json();if(!d.ok)throw Error(d.error);return d}
 async function start(){try{status.textContent='Sending codes…';const d=await call('/api/auth/register/start',{email:email.value});flowId=d.flowId;details.classList.add('hidden');codes.classList.remove('hidden');status.textContent='Codes sent.'}catch(e){status.textContent=e.message;status.className='err'}}
 async function verify(){try{status.textContent='Verifying…';await call('/api/auth/register/verify',{flowId,emailCode:emailCode.value});const d=await call('/api/auth/passkey/options',{flowId});const credential=await navigator.credentials.create({publicKey:enc(d.options)});await call('/api/auth/passkey/verify',{flowId,credential:out(credential)});status.textContent='Registration complete. You can close this window.';tg.MainButton.setText('Done').show().onClick(()=>tg.close())}catch(e){status.textContent=e.message;status.className='err'}}
