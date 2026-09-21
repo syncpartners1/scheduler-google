@@ -106,7 +106,7 @@ function parseInTz(localStr, tz) {
     hour:   '2-digit',
     minute: '2-digit',
     second: '2-digit',
-    hour12: false,
+    hourCycle: 'h23',
   }).formatToParts(approxUtc)
 
   const get = (type) => parts.find(p => p.type === type)?.value || '00'
@@ -116,6 +116,7 @@ function parseInTz(localStr, tz) {
   // diff is negative for positive-offset zones (e.g. Jerusalem UTC+2: diff = −2h).
   // Adding diff to approxUtc moves it in the right direction to get the true UTC instant.
   const tzDate = new Date(tzStr + 'Z')
+  if (Number.isNaN(tzDate.getTime())) throw new Error(`Could not resolve ${localStr} in ${tz}`)
   const diff   = approxUtc - tzDate              // milliseconds offset
   return new Date(approxUtc.getTime() + diff)   // ← was (- diff), which was wrong
 }
