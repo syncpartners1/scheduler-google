@@ -31,4 +31,5 @@ export async function clearBotSession(chatId) {
 export function authFlowRef(flowId) { return db.collection('authFlows').doc(flowId) }
 export function userRef(userId) { return db.collection('users').doc(String(userId)) }
 export function credentialRef(credentialId) { return db.collection('passkeys').doc(credentialId) }
+export function passkeyHandoffRef(tokenHash) { return db.collection('passkeyHandoffs').doc(tokenHash) }
 export { db, FieldValue }
