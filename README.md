@@ -221,3 +221,17 @@ WEBAUTHN_ORIGIN=https://auth.changenavigator.co.il npm run telegram:set-webhook
 Registration is passwordless. The bot collects the user's own contact with Telegram's native contact-share button. The Mini App validates Telegram `initData` server-side, verifies email through Brevo, proves phone ownership through Telegram native own-contact share, and creates a WebAuthn passkey scoped to RP ID `changenavigator.co.il`. Everyday login uses the passkey only; email and phone verification are repeated only for account recovery.
 
 Firestore stores users, passkeys, temporary auth flows, and bot sessions. Configure Firestore TTL on `authFlows.expiresAt` and `telegramBotSessions.expiresAt`.
+
+### External-browser passkey handoff
+
+Telegram Mini Apps do not reliably expose WebAuthn. After email and native-contact verification, registration opens a single-use external-browser link on `auth.changenavigator.co.il` to create the passkey in Safari or Chrome. The opaque handoff token is random; Firestore stores only its SHA-256 hash, binds it to the verified Telegram registration flow, and expires it after five minutes. Successful passkey verification atomically creates the user/passkey and deletes both the registration flow and handoff.
+
+Enable Firestore TTL on `passkeyHandoffs.expiresAt` in addition to the existing auth-flow and bot-session TTL policies:
+
+```bash
+gcloud firestore fields ttls update expiresAt \
+  --project=change-navigator-abn \
+  --database='(default)' \
+  --collection-group=passkeyHandoffs \
+  --enable-ttl
+```
