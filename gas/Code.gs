@@ -359,10 +359,11 @@ function createEvent(body) {
   }
 
   const conferenceVersion = isInPerson ? 0 : 1
-  const createdEvent = Calendar.Events.insert(
-    eventResource,
-    OWNER_CALENDAR_ID,
-    { conferenceDataVersion: conferenceVersion, sendUpdates: 'all' }
+  const createdEvent = calendarApiRequest(
+    'post',
+    `/calendars/${encodeURIComponent(OWNER_CALENDAR_ID)}/events`,
+    { conferenceDataVersion: conferenceVersion, sendUpdates: 'all' },
+    eventResource
   )
 
   // Google sometimes provisions Meet links asynchronously — entryPoints may be empty right
@@ -380,7 +381,7 @@ function createEvent(body) {
   if (!meetLink && !isInPerson) {
     Utilities.sleep(2000)
     try {
-      const evt2 = Calendar.Events.get(OWNER_CALENDAR_ID, createdEvent.id)
+      const evt2 = calendarApiRequest('get', `/calendars/${encodeURIComponent(OWNER_CALENDAR_ID)}/events/${encodeURIComponent(createdEvent.id)}`)
       const eps2 = evt2.conferenceData && evt2.conferenceData.entryPoints
       if (eps2) {
         const vep = eps2.find(ep => ep.entryPointType === 'video')
@@ -774,6 +775,38 @@ function logCancellationToSheet(params) {
 // ─────────────────────────────────────────────────────────────
 
 /**
+ * Call Google Calendar API v3 with the Apps Script deployment owner's OAuth token.
+ * Avoids relying on the optional `Calendar` Advanced Service global, which is not
+ * present when a browser-created Apps Script project has not enabled that service.
+ */
+function calendarApiRequest(method, path, query, body) {
+  const params = Object.keys(query || {})
+    .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
+    .join('&')
+  const url = `https://www.googleapis.com/calendar/v3${path}${params ? `?${params}` : ''}`
+  const options = {
+    method: method,
+    headers: { Authorization: `Bearer ${ScriptApp.getOAuthToken()}` },
+    muteHttpExceptions: true,
+  }
+  if (body !== undefined) {
+    options.contentType = 'application/json'
+    options.payload = JSON.stringify(body)
+  }
+
+  const response = UrlFetchApp.fetch(url, options)
+  const status = response.getResponseCode()
+  const text = response.getContentText()
+  let data = {}
+  try { data = text ? JSON.parse(text) : {} } catch (_) {}
+  if (status < 200 || status >= 300) {
+    const message = data.error && data.error.message ? data.error.message : text.slice(0, 300)
+    throw new Error(`Calendar API ${method.toUpperCase()} failed (${status}): ${message}`)
+  }
+  return data
+}
+
+/**
  * Find an existing calendar event whose description contains a requestId.
  * Searches the day of startTime ± 1 day to handle tz edge cases.
  */
@@ -796,7 +829,7 @@ function getMeetLinkFromEvent(event) {
   // The Calendar REST API only accepts the base ID — strip the suffix.
   try {
     const baseId    = event.getId().replace(/@google\.com$/, '')
-    const restEvent = Calendar.Events.get(OWNER_CALENDAR_ID, baseId)
+    const restEvent = calendarApiRequest('get', `/calendars/${encodeURIComponent(OWNER_CALENDAR_ID)}/events/${encodeURIComponent(baseId)}`)
     const eps       = restEvent.conferenceData && restEvent.conferenceData.entryPoints
     if (eps) {
       const videoEp = eps.find(ep => ep.entryPointType === 'video')
