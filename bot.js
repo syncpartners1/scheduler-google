@@ -119,7 +119,8 @@ bot.on('contact', async (ctx) => {
   const sess = await getBotSession(ctx.from.id)
   sess.registrationPhone = ctx.message.contact.phone_number.startsWith('+') ? ctx.message.contact.phone_number : `+${ctx.message.contact.phone_number}`
   await saveBotSession(ctx.from.id, sess)
-  await ctx.reply('Phone received. Continue registration securely:', { ...Markup.removeKeyboard(), ...Markup.inlineKeyboard([[Markup.button.webApp('Continue registration', `${REGISTRATION_URL}/register`)]]) })
+  await ctx.reply('Phone received.', Markup.removeKeyboard())
+  await ctx.reply('Continue registration securely:', Markup.inlineKeyboard([[Markup.button.webApp('Continue registration', `${REGISTRATION_URL}/register`)]]))
 })
 
 // Date selected → ask for duration

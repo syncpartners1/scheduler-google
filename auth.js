@@ -90,6 +90,30 @@ const phoneVerifier = {
 }
 
 
+async function sendTelegramRegistrationComplete(telegramId) {
+  if (!BOT_TOKEN) return false
+  try {
+    const res = await fetch(`https://api.telegram.org/bot${BOT_TOKEN}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: telegramId,
+        text: 'Registration complete - you can now /book',
+        reply_markup: { remove_keyboard: true },
+      }),
+    })
+    if (!res.ok) {
+      const detail = await res.text()
+      console.error('[auth/registration-notification]', res.status, detail)
+      return false
+    }
+    return true
+  } catch (err) {
+    console.error('[auth/registration-notification]', err)
+    return false
+  }
+}
+
 export function registerAuthRoutes(app) {
   app.get('/register', (_req, res) => res.type('html').send(REGISTRATION_HTML))
 
@@ -204,7 +228,8 @@ export function registerAuthRoutes(app) {
         transaction.delete(flowSnap.ref)
         transaction.delete(handoffSnap.ref)
       })
-      res.json({ ok: true, user: { email: loaded.flow.email, name: loaded.flow.displayName } })
+      const notificationSent = await sendTelegramRegistrationComplete(loaded.handoff.telegramId)
+      res.json({ ok: true, user: { email: loaded.flow.email, name: loaded.flow.displayName }, notificationSent })
     } catch (err) {
       console.error('[auth/passkey/handoff/verify]', err)
       res.status(400).json({ ok: false, error: err.message })
