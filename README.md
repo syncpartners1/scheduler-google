@@ -208,3 +208,16 @@ and save the resulting `/exec` URL in `SCHEDULER_GOOGLE_GAS_URL`.
 Cloud Scheduler is not used: this application is request-driven, not a cron job.
 The optional Telegram bot still uses long polling and is not started by the Cloud
 Run web image. Move it to Telegram webhooks before retiring a live Railway bot.
+
+## Telegram webhook and passwordless registration
+
+Production receives Telegram updates at `POST /telegram/$TELEGRAM_WEBHOOK_PATH`. Telegram must also send the matching `X-Telegram-Bot-Api-Secret-Token` header. Register the webhook once after `auth.changenavigator.co.il` is mapped and the new revision is healthy:
+
+```bash
+TELEGRAM_BOT_TOKEN=... TELEGRAM_WEBHOOK_PATH=... TELEGRAM_WEBHOOK_SECRET=... \
+WEBAUTHN_ORIGIN=https://auth.changenavigator.co.il npm run telegram:set-webhook
+```
+
+Registration is passwordless. The bot collects the user's own contact with Telegram's native contact-share button. The Mini App validates Telegram `initData` server-side, verifies email through Brevo, proves phone ownership through Telegram native own-contact share, and creates a WebAuthn passkey scoped to RP ID `changenavigator.co.il`. Everyday login uses the passkey only; email and phone verification are repeated only for account recovery.
+
+Firestore stores users, passkeys, temporary auth flows, and bot sessions. Configure Firestore TTL on `authFlows.expiresAt` and `telegramBotSessions.expiresAt`.

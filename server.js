@@ -1,4 +1,4 @@
-﻿/**
+/**
  * Express server for the Scheduling App.
  *
  * Responsibilities:
@@ -18,6 +18,9 @@ import { createServer }  from 'http'
 import { fileURLToPath } from 'url'
 import { dirname, join } from 'path'
 import fetch             from 'node-fetch'
+import crypto            from 'crypto'
+import { bot }           from './bot.js'
+import { registerAuthRoutes } from './auth.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app       = express()
@@ -27,6 +30,8 @@ const GAS_URL   =
   process.env.VITE_GAS_URL ||
   'https://script.google.com/macros/s/AKfycbxVe7r1QIZus4kwPlWk5T6ntKO8ebAtouz6dQzRuVgVd1bhbQMX5ZbQteJIORhv0LLB/exec'
 const API_KEY   = process.env.API_KEY || ''
+const TELEGRAM_WEBHOOK_PATH = process.env.TELEGRAM_WEBHOOK_PATH || ''
+const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || ''
 
 // â”€â”€ Slot generation (mirrors src/utils/timeSlots.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -100,6 +105,19 @@ function generateAvailableSlots(dateStr, busySlots, userTz, duration) {
 // â”€â”€ Middleware â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 app.use(express.json())
+registerAuthRoutes(app)
+
+function safeEqual(a, b) {
+  const aa = Buffer.from(String(a || '')); const bb = Buffer.from(String(b || ''))
+  return aa.length === bb.length && crypto.timingSafeEqual(aa, bb)
+}
+
+if (bot && TELEGRAM_WEBHOOK_PATH && TELEGRAM_WEBHOOK_SECRET) {
+  app.post(`/telegram/${TELEGRAM_WEBHOOK_PATH}`, (req, res, next) => {
+    if (!safeEqual(req.get('X-Telegram-Bot-Api-Secret-Token'), TELEGRAM_WEBHOOK_SECRET)) return res.sendStatus(401)
+    return bot.webhookCallback(`/telegram/${TELEGRAM_WEBHOOK_PATH}`)(req, res, next)
+  })
+}
 
 // CORS â€” allow all origins by default (required for Wix iframe + external apps)
 app.use((req, res, next) => {

@@ -75,7 +75,8 @@ jobs:
             --max-instances=5 \
             --concurrency=80 \
             --timeout=30 \
-            --set-secrets="API_KEY=SCHEDULER_GOOGLE_API_KEY:latest,GAS_URL=SCHEDULER_GOOGLE_GAS_URL:latest" \
+            --set-secrets="API_KEY=SCHEDULER_GOOGLE_API_KEY:latest,GAS_URL=SCHEDULER_GOOGLE_GAS_URL:latest,TELEGRAM_BOT_TOKEN=SCHEDULER_GOOGLE_TELEGRAM_BOT_TOKEN:latest,TELEGRAM_WEBHOOK_PATH=SCHEDULER_GOOGLE_TELEGRAM_WEBHOOK_PATH:latest,TELEGRAM_WEBHOOK_SECRET=SCHEDULER_GOOGLE_TELEGRAM_WEBHOOK_SECRET:latest,BREVO_API_KEY=SCHEDULER_GOOGLE_BREVO_API_KEY:latest" \
+            --set-env-vars="SERVER_URL=http://127.0.0.1:8080,WEBAUTHN_RP_ID=changenavigator.co.il,WEBAUTHN_ORIGIN=https://auth.changenavigator.co.il" \
             --project="${PROJECT_ID}" \
             --quiet
 

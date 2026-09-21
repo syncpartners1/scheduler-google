@@ -20,30 +20,14 @@
 
 import { Telegraf, Markup } from 'telegraf'
 import fetch from 'node-fetch'
+import { getBotSession, saveBotSession, clearBotSession } from './storage.js'
 
 const BOT_TOKEN  = process.env.TELEGRAM_BOT_TOKEN
-const SERVER_URL = process.env.SERVER_URL || 'https://abn-sch.up.railway.app'
+const SERVER_URL = process.env.SERVER_URL || `http://127.0.0.1:${process.env.PORT || 3000}`
+const REGISTRATION_URL = process.env.WEBAUTHN_ORIGIN || 'https://auth.changenavigator.co.il'
 const API_KEY    = process.env.API_KEY    || ''
 
-if (!BOT_TOKEN) {
-  console.error('TELEGRAM_BOT_TOKEN is not set. Telegram bot will not start.')
-  process.exit(1)
-}
-
-const bot = new Telegraf(BOT_TOKEN)
-
-// ── In-memory session store ──────────────────────────────────────────────────
-// (Replace with Redis for multi-instance Railway deployments)
-const sessions = new Map()
-
-function getSession(chatId) {
-  if (!sessions.has(chatId)) sessions.set(chatId, {})
-  return sessions.get(chatId)
-}
-
-function clearSession(chatId) {
-  sessions.delete(chatId)
-}
+const bot = BOT_TOKEN ? new Telegraf(BOT_TOKEN) : null
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -103,9 +87,11 @@ function formatDate(dateStr) {
 
 // ── Bot handlers ─────────────────────────────────────────────────────────────
 
+if (bot) {
+
 // /start or /book — show date picker
 const showDatePicker = async (ctx) => {
-  clearSession(ctx.chat.id)
+  await clearBotSession(ctx.chat.id)
   const dates   = nextWorkingDays(7)
   const buttons = dates.map(d =>
     Markup.button.callback(formatDate(d), `date:${d}`)
@@ -124,11 +110,24 @@ const showDatePicker = async (ctx) => {
 bot.start(showDatePicker)
 bot.command('book', showDatePicker)
 
+bot.command('register', async (ctx) => {
+  await ctx.reply('Share your own Telegram phone number to start passwordless registration.', Markup.keyboard([[Markup.button.contactRequest('Share my phone')]]).oneTime().resize())
+})
+
+bot.on('contact', async (ctx) => {
+  if (ctx.message.contact.user_id !== ctx.from.id) return ctx.reply('Please share your own contact, not someone else’s.')
+  const sess = await getBotSession(ctx.from.id)
+  sess.registrationPhone = ctx.message.contact.phone_number.startsWith('+') ? ctx.message.contact.phone_number : `+${ctx.message.contact.phone_number}`
+  await saveBotSession(ctx.from.id, sess)
+  await ctx.reply('Phone received. Continue registration securely:', { ...Markup.removeKeyboard(), ...Markup.inlineKeyboard([[Markup.button.webApp('Continue registration', `${REGISTRATION_URL}/register`)]]) })
+})
+
 // Date selected → ask for duration
 bot.action(/^date:(.+)$/, async (ctx) => {
   const date = ctx.match[1]
-  const sess = getSession(ctx.chat.id)
+  const sess = await getBotSession(ctx.chat.id)
   sess.date  = date
+  await saveBotSession(ctx.chat.id, sess)
 
   await ctx.editMessageText(
     `📅 *${formatDate(date)}*\n\n⏱ How long should the meeting be?`,
@@ -143,8 +142,8 @@ bot.action(/^date:(.+)$/, async (ctx) => {
 })
 
 // Back to dates
-bot.action('back:dates', (ctx) => {
-  clearSession(ctx.chat.id)
+bot.action('back:dates', async (ctx) => {
+  await clearBotSession(ctx.chat.id)
   return showDatePicker(ctx)
 })
 
@@ -161,8 +160,9 @@ const TZ_OPTIONS = [
 // Duration selected → ask for timezone
 bot.action(/^dur:(\d+)$/, async (ctx) => {
   const duration = Number(ctx.match[1])
-  const sess     = getSession(ctx.chat.id)
+  const sess     = await getBotSession(ctx.chat.id)
   sess.duration  = duration
+  await saveBotSession(ctx.chat.id, sess)
 
   const buttons = TZ_OPTIONS.map(o => Markup.button.callback(o.label, `tz:${o.tz}`))
   const rows    = []
@@ -178,8 +178,9 @@ bot.action(/^dur:(\d+)$/, async (ctx) => {
 // Timezone selected → load + show slots
 bot.action(/^tz:(.+)$/, async (ctx) => {
   const userTz = ctx.match[1]
-  const sess   = getSession(ctx.chat.id)
+  const sess   = await getBotSession(ctx.chat.id)
   sess.userTz  = userTz
+  await saveBotSession(ctx.chat.id, sess)
 
   await ctx.editMessageText(`⏳ Loading available times for *${formatDate(sess.date)}*…`, { parse_mode: 'Markdown' })
 
@@ -194,6 +195,7 @@ bot.action(/^tz:(.+)$/, async (ctx) => {
     }
 
     sess.slots = data.slots
+    await saveBotSession(ctx.chat.id, sess)
     const buttons = data.slots.map((s, i) =>
       Markup.button.callback(s.label, `slot:${i}`)
     )
@@ -211,89 +213,47 @@ bot.action(/^tz:(.+)$/, async (ctx) => {
   }
 })
 
-// Slot selected → ask for contact details
+// Slot selected → require a registered profile, then ask only for subject
 bot.action(/^slot:(\d+)$/, async (ctx) => {
-  const idx  = Number(ctx.match[1])
-  const sess = getSession(ctx.chat.id)
-
-  if (!sess.slots || !sess.slots[idx]) {
-    return ctx.reply('Something went wrong. Please use /book to start over.')
-  }
-
+  const idx = Number(ctx.match[1])
+  const sess = await getBotSession(ctx.chat.id)
+  if (!sess.slots || !sess.slots[idx]) return ctx.reply('Something went wrong. Please use /book to start over.')
   sess.selectedSlot = sess.slots[idx]
-
-  await ctx.editMessageText(
-    `✅ *${sess.selectedSlot.label}* on *${formatDate(sess.date)}* — ${sess.duration} min\n\n` +
-    `Please send your details in this format:\n\n` +
-    `\`Name | email@example.com | Meeting Subject\``,
-    { parse_mode: 'Markdown' }
-  )
-
-  sess.awaitingDetails = true
+  const profileRes = await fetchWithTimeout(`${SERVER_URL}/api/auth/profile/${ctx.from.id}`, { headers: HEADERS })
+  if (!profileRes.ok) {
+    await saveBotSession(ctx.chat.id, sess)
+    return ctx.editMessageText('Register securely first. Use /register to share your phone and create a passkey, then return to /book.')
+  }
+  const { profile } = await profileRes.json()
+  sess.profile = profile
+  sess.awaitingSubject = true
+  await saveBotSession(ctx.chat.id, sess)
+  await ctx.editMessageText(`✅ *${sess.selectedSlot.label}* on *${formatDate(sess.date)}* — ${sess.duration} min\n\nSend the meeting subject.`, { parse_mode: 'Markdown' })
 })
 
-// Handle text input for contact details
 bot.on('text', async (ctx) => {
-  const sess = getSession(ctx.chat.id)
-  if (!sess.awaitingDetails) return
-
-  const parts = ctx.message.text.split('|').map(s => s.trim())
-  if (parts.length < 3) {
-    return ctx.reply(
-      '⚠️ Please use the format:\n`Name | email@example.com | Meeting Subject`',
-      { parse_mode: 'Markdown' }
-    )
-  }
-
-  const [name, email, subject] = parts
-
-  const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-  if (!emailRe.test(email)) {
-    return ctx.reply('⚠️ That doesn\'t look like a valid email. Please try again.')
-  }
-
-  sess.awaitingDetails = false
-
+  const sess = await getBotSession(ctx.chat.id)
+  if (!sess.awaitingSubject) return
+  const subject = ctx.message.text.trim()
+  if (!subject) return ctx.reply('Please send a meeting subject.')
+  const name = sess.profile.name || ctx.from.first_name || 'Telegram user'
+  const email = sess.profile.email
+  sess.awaitingSubject = false
+  await saveBotSession(ctx.chat.id, sess)
   const processingMsg = await ctx.reply('⏳ Creating your booking…')
-
   try {
     const requestId = `tg-${ctx.chat.id}-${sess.selectedSlot.start}-${Date.now()}`
-    const data = await createBooking({
-      name, email, subject,
-      startISO:  sess.selectedSlot.start,
-      duration:  sess.duration,
-      userTz:    sess.userTz,
-      requestId,
-    })
-
+    const data = await createBooking({ name, email, subject, startISO: sess.selectedSlot.start, duration: sess.duration, userTz: sess.userTz, requestId })
     if (!data.ok) throw new Error(data.error || 'Booking failed')
-
-    // Success
-    clearSession(ctx.chat.id)
-
-    await ctx.telegram.editMessageText(
-      ctx.chat.id, processingMsg.message_id, null,
-      `✅ *Booking Confirmed!*\n\n` +
-      `📅 *${formatDate(sess.date)}* at *${sess.selectedSlot.label}* (${sess.duration} min)\n` +
-      `👤 ${name}\n` +
-      `📧 ${email}\n` +
-      `📝 ${subject}\n\n` +
-      `🎥 *Google Meet:* ${data.meetLink}\n\n` +
-      `_A calendar invite has been sent to your email._`,
-      { parse_mode: 'Markdown' }
-    )
-
-    // Inline button to join Meet
+    await clearBotSession(ctx.chat.id)
+    await ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, null,
+      `✅ *Booking Confirmed!*\n\n📅 *${formatDate(sess.date)}* at *${sess.selectedSlot.label}* (${sess.duration} min)\n👤 ${name}\n📧 ${email}\n📝 ${subject}\n\n🎥 *Google Meet:* ${data.meetLink}\n\n_A calendar invite has been sent to your email._`,
+      { parse_mode: 'Markdown' })
     await ctx.reply('Tap below to join your meeting:', Markup.inlineKeyboard([
-      [Markup.button.url('Join Google Meet', data.meetLink)],
-      [Markup.button.callback('Book another meeting', 'back:dates')],
+      [Markup.button.url('Join Google Meet', data.meetLink)], [Markup.button.callback('Book another meeting', 'back:dates')],
     ]))
-
   } catch (err) {
-    await ctx.telegram.editMessageText(
-      ctx.chat.id, processingMsg.message_id, null,
-      `❌ Booking failed: ${err.message}\n\nUse /book to try again.`
-    )
+    await ctx.telegram.editMessageText(ctx.chat.id, processingMsg.message_id, null, `❌ Booking failed: ${err.message}\n\nUse /book to try again.`)
   }
 })
 
@@ -304,11 +264,6 @@ bot.catch((err, ctx) => {
   ctx.reply('An unexpected error occurred. Please use /book to start over.').catch(() => {})
 })
 
-// ── Launch ────────────────────────────────────────────────────────────────────
+} // if (bot)
 
-bot.launch({ dropPendingUpdates: true })
-console.log('Telegram scheduling bot started')
-
-// Graceful stop
-process.once('SIGINT',  () => bot.stop('SIGINT'))
-process.once('SIGTERM', () => bot.stop('SIGTERM'))
+export { bot }

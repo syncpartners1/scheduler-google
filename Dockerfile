@@ -12,7 +12,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
-COPY server.js ./
+COPY server.js bot.js auth.js storage.js ./
 COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 8080
