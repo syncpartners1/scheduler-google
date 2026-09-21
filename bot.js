@@ -67,7 +67,7 @@ function nextWorkingDays(n = 7) {
 
   while (days.length < n) {
     const dow = d.getDay()
-    if (dow !== 0 && dow !== 6) {  // skip weekends (0=Sun, 6=Sat)
+    if (dow !== 6) {  // work days are Sun-Fri; skip Saturday only
       days.push(d.toISOString().slice(0, 10))
     }
     d.setDate(d.getDate() + 1)
@@ -187,7 +187,8 @@ bot.action(/^tz:(.+)$/, async (ctx) => {
   const { duration } = sess
   try {
     const data = await fetchSlots(sess.date, userTz, duration)
-    if (!data.ok || !data.slots?.length) {
+    if (!data.ok) throw new Error(data.error || 'Availability service failed')
+    if (!data.slots?.length) {
       return ctx.editMessageText(
         `😔 No available slots on *${formatDate(sess.date)}* for ${duration} min.\n\nUse /book to try another date.`,
         { parse_mode: 'Markdown' }
