@@ -25,6 +25,7 @@
 
 import fetch from 'node-fetch'
 import { userRef } from './storage.js'
+import { sendBridgeHtml } from './telegram-html.js'
 
 const AICOACH_URL = (process.env.AICOACH_URL || '').replace(/\/+$/, '')
 const BRIDGE_SECRET = process.env.AICOACH_BRIDGE_SECRET || ''
@@ -103,7 +104,7 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
       if (data.already_active) {
         await ctx.reply('שיחת האימון כבר פעילה. אפשר לשלוח הודעה. לסיום שלחו /done.')
       } else if (data.message) {
-        await ctx.reply(data.message)
+        await sendBridgeHtml(ctx, data.message)
       }
     } catch (err) {
       console.error('[coach/start]', err)
@@ -124,8 +125,7 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
       const sess = await getBotSession(ctx.chat.id)
       sess.coachActive = false
       await saveBotSession(ctx.chat.id, sess)
-      await ctx.reply(data.summary_text || 'השיחה נשמרה. תודה!', { parse_mode: 'HTML' })
-        .catch(() => ctx.reply('השיחה נשמרה. תודה!'))
+      await sendBridgeHtml(ctx, data.summary_text || 'השיחה נשמרה. תודה!')
     } catch (err) {
       console.error('[coach/done]', err)
       await ctx.reply('לא ניתן לסיים כרגע את השיחה. נסו שוב מאוחר יותר.')
@@ -207,8 +207,7 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
           return ctx.reply('שיחת האימון הסתיימה. שלחו /coach כדי להתחיל שיחה חדשה.')
         }
         if (status !== 200 || !data.ok) throw new Error(data.detail || 'תקלה במנוע האימון')
-        if (data.reply) await ctx.reply(data.reply, { parse_mode: 'HTML' })
-          .catch(() => ctx.reply(data.reply))
+        if (data.reply) await sendBridgeHtml(ctx, data.reply)
       } catch (err) {
         console.error('[coach/chat]', err)
         await ctx.reply('אירעה תקלה בשיחת האימון. נסו שוב, או שלחו /done לסיום.')
@@ -257,7 +256,7 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
     if (status === 404) return ctx.reply('המשתמש לא נמצא.')
     if (status !== 200 || !data.ok) {
       if (data.error === 'ambiguous') {
-        const names = (data.candidates || []).map(c => `• ${esc(c.name)} — <code>${c.user_id}</code>`).join('\n')
+        const names = (data.candidates || []).map(c => `• ${esc(c.name)} — <code>${esc(c.user_id)}</code>`).join('\n')
         return ctx.reply(`נמצאו כמה משתמשים. ציינו פרטים נוספים:\n${names}`, { parse_mode: 'HTML' })
       }
       throw new Error(data.detail || 'לא ניתן לטעון דוח')
