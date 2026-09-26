@@ -166,6 +166,9 @@ Users chat with your bot:
 | `API_KEY` | Recommended | Protects `/api/*` endpoints |
 | `TELEGRAM_BOT_TOKEN` | Optional | Enable Telegram bot |
 | `SERVER_URL` | If using bot | Public Railway URL for bot→API calls |
+| `AICOACH_URL` | For coaching | Base URL of the AICOACH service (coaching bridge) |
+| `AICOACH_BRIDGE_SECRET` | For coaching | Must match `TELEGRAM_BRIDGE_SECRET` on AICOACH |
+| `ADMIN_TELEGRAM_ID` | For coaching | Telegram user ID allowed to use admin commands |
 
 ---
 
@@ -208,6 +211,23 @@ and save the resulting `/exec` URL in `SCHEDULER_GOOGLE_GAS_URL`.
 Cloud Scheduler is not used: this application is request-driven, not a cron job.
 The optional Telegram bot still uses long polling and is not started by the Cloud
 Run web image. Move it to Telegram webhooks before retiring a live Railway bot.
+
+## Telegram coaching mode (consolidated bot)
+
+This bot is the single Telegram front door: registration, booking, and AI
+coaching. Coaching conversations are proxied to the AICOACH service through
+its internal bridge API (`/internal/telegram/*`, `X-Bridge-Secret` auth), so
+the coaching engine, session state, and history stay in AICOACH's Postgres.
+
+User commands: `/coach` (or `/newsession`) start a session, free text chats,
+`/done` ends it with a summary, `/message` texts the human coach. Admin
+commands (gated by `ADMIN_TELEGRAM_ID`): `/users`, `/report <query>`,
+`/invite [name] [contact]`, `/broadcast <text>`; replying to a forwarded
+user message routes the reply back to that user.
+
+Cloud Run deploy needs two extra secrets (`SCHEDULER_GOOGLE_AICOACH_BRIDGE_SECRET`,
+`SCHEDULER_GOOGLE_ADMIN_TELEGRAM_ID`) and the `AICOACH_URL` env var. The request
+timeout is 300s because coaching LLM turns can exceed 30s.
 
 ## Telegram webhook and passwordless registration
 
