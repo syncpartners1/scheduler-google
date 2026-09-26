@@ -67,7 +67,7 @@ async function ensureCoachUser(ctx, profile) {
     method: 'POST',
     body: { telegram_id: ctx.from.id, name, phone: profile.phone, email: profile.email, lang: 'he' },
   })
-  if (status !== 200 || !data.ok) throw new Error(data.detail || 'Could not prepare your coaching profile')
+  if (status !== 200 || !data.ok) throw new Error(data.detail || 'לא ניתן להכין את פרופיל האימון')
   return data
 }
 
@@ -80,7 +80,7 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
   const requireProfile = async (ctx) => {
     const profile = await firestoreProfile(ctx.from.id)
     if (!profile) {
-      await ctx.reply('Register securely first. Use /register to share your phone and create a passkey, then come back.')
+      await ctx.reply('כדי להתחיל אימון, צריך להירשם תחילה. שלחו /register, שתפו את מספר הטלפון שלכם והשלימו את ההרשמה.')
       return null
     }
     return profile
@@ -95,19 +95,19 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
       const { status, data } = await bridge('/internal/telegram/session/start', {
         method: 'POST', body: { telegram_id: ctx.from.id },
       })
-      if (status === 403) return ctx.reply(data.detail || 'Your coaching account is not active.')
-      if (status !== 200 || !data.ok) throw new Error(data.detail || 'Could not start the session')
+      if (status === 403) return ctx.reply('לא ניתן להתחיל אימון בחשבון הזה כרגע. אם החשבון ממתין לאישור, פנו לעדי.')
+      if (status !== 200 || !data.ok) throw new Error(data.detail || 'לא ניתן להתחיל את שיחת האימון')
       const sess = await getBotSession(ctx.chat.id)
       sess.coachActive = true
       await saveBotSession(ctx.chat.id, sess)
       if (data.already_active) {
-        await ctx.reply('You already have an active coaching session - just send your message. Use /done to end it.')
+        await ctx.reply('שיחת האימון כבר פעילה. אפשר לשלוח הודעה. לסיום שלחו /done.')
       } else if (data.message) {
         await ctx.reply(data.message)
       }
     } catch (err) {
       console.error('[coach/start]', err)
-      await ctx.reply(`Could not start a coaching session: ${err.message}`)
+      await ctx.reply('לא ניתן להתחיל כרגע את שיחת האימון. נסו שוב מאוחר יותר.')
     }
   }
   bot.command('coach', startCoaching)
@@ -119,16 +119,16 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
       const { status, data } = await bridge('/internal/telegram/session/end', {
         method: 'POST', body: { telegram_id: ctx.from.id },
       })
-      if (status === 409) return ctx.reply('No active coaching session. Use /coach to start one.')
-      if (status !== 200 || !data.ok) throw new Error(data.detail || 'Could not end the session')
+      if (status === 409) return ctx.reply('אין שיחת אימון פעילה. שלחו /coach כדי להתחיל.')
+      if (status !== 200 || !data.ok) throw new Error(data.detail || 'לא ניתן לסיים את שיחת האימון')
       const sess = await getBotSession(ctx.chat.id)
       sess.coachActive = false
       await saveBotSession(ctx.chat.id, sess)
-      await ctx.reply(data.summary_text || 'Session saved. Thanks!', { parse_mode: 'HTML' })
-        .catch(() => ctx.reply('Session saved. Thanks!'))
+      await ctx.reply(data.summary_text || 'השיחה נשמרה. תודה!', { parse_mode: 'HTML' })
+        .catch(() => ctx.reply('השיחה נשמרה. תודה!'))
     } catch (err) {
       console.error('[coach/done]', err)
-      await ctx.reply(`Could not end the session: ${err.message}`)
+      await ctx.reply('לא ניתן לסיים כרגע את השיחה. נסו שוב מאוחר יותר.')
     }
   })
 
@@ -139,25 +139,25 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
       const sess = await getBotSession(ctx.chat.id)
       sess.awaitingMessage = true
       await saveBotSession(ctx.chat.id, sess)
-      return ctx.reply('What would you like to send to Adi? Write it in your next message.')
+      return ctx.reply('מה תרצו לשלוח לעדי? כתבו את ההודעה הבאה שלכם.')
     }
     await forwardToAdmin(ctx, text)
   })
 
   async function forwardToAdmin(ctx, text) {
-    if (!ADMIN_TELEGRAM_ID) return ctx.reply('The coach inbox is not configured.')
-    const name = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ') || 'Unknown'
+    if (!ADMIN_TELEGRAM_ID) return ctx.reply('לא ניתן לשלוח הודעה למאמן כרגע.')
+    const name = [ctx.from.first_name, ctx.from.last_name].filter(Boolean).join(' ') || 'ללא שם'
     try {
       // "telegram id: N" is parsed back when the admin replies to this message
       await bot.telegram.sendMessage(
         ADMIN_TELEGRAM_ID,
-        `📨 <b>Message from ${esc(name)}</b> (telegram id: ${ctx.from.id})\n\n${esc(text)}`,
+        `📨 <b>הודעה מאת ${esc(name)}</b> (מזהה טלגרם: ${ctx.from.id})\n\n${esc(text)}`,
         { parse_mode: 'HTML' },
       )
-      await ctx.reply('✅ Your message has been sent to Adi.')
+      await ctx.reply('✅ ההודעה נשלחה לעדי.')
     } catch (err) {
       console.error('[coach/message]', err)
-      await ctx.reply('Could not deliver your message. Please try again later.')
+      await ctx.reply('לא ניתן לשלוח את ההודעה כרגע. נסו שוב מאוחר יותר.')
     }
   }
 
@@ -165,18 +165,18 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
   bot.on('text', async (ctx, next) => {
     // Admin replying to a forwarded user message → route back to the user
     if (isAdmin(ctx) && ctx.message.reply_to_message) {
-      const m = /telegram id: (\d+)/.exec(ctx.message.reply_to_message.text || '')
+      const m = /(?:מזהה טלגרם|telegram id): (\d+)/.exec(ctx.message.reply_to_message.text || '')
       if (m) {
         try {
           await bot.telegram.sendMessage(
             m[1],
-            `💬 <b>Message from Adi Ben Nesher:</b>\n\n${esc(ctx.message.text)}`,
+            `💬 <b>הודעה מעדי בן נשר:</b>\n\n${esc(ctx.message.text)}`,
             { parse_mode: 'HTML' },
           )
-          await ctx.reply('✅ Reply delivered.')
+          await ctx.reply('✅ התשובה נשלחה.')
         } catch (err) {
           console.error('[coach/admin-reply]', err)
-          await ctx.reply('❌ Could not deliver the reply (the user may have blocked the bot).')
+          await ctx.reply('❌ לא ניתן לשלוח את התשובה (ייתכן שהמשתמש חסם את הבוט).')
         }
         return
       }
@@ -204,14 +204,14 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
         if (status === 409) {
           sess.coachActive = false
           await saveBotSession(ctx.chat.id, sess)
-          return ctx.reply('Your coaching session has ended. Use /coach to start a new one.')
+          return ctx.reply('שיחת האימון הסתיימה. שלחו /coach כדי להתחיל שיחה חדשה.')
         }
-        if (status !== 200 || !data.ok) throw new Error(data.detail || 'Coaching engine error')
+        if (status !== 200 || !data.ok) throw new Error(data.detail || 'תקלה במנוע האימון')
         if (data.reply) await ctx.reply(data.reply, { parse_mode: 'HTML' })
           .catch(() => ctx.reply(data.reply))
       } catch (err) {
         console.error('[coach/chat]', err)
-        await ctx.reply('Something went wrong in the coaching session. Please try again, or /done to end the session.')
+        await ctx.reply('אירעה תקלה בשיחת האימון. נסו שוב, או שלחו /done לסיום.')
       }
       return
     }
@@ -222,28 +222,28 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
   // ── Admin commands ────────────────────────────────────────────────────────
 
   const adminOnly = (fn) => async (ctx) => {
-    if (!isAdmin(ctx)) return ctx.reply('This command is for the coach only.')
+    if (!isAdmin(ctx)) return ctx.reply('הפקודה הזו מיועדת למאמן בלבד.')
     try {
       await fn(ctx)
     } catch (err) {
       console.error('[coach/admin]', err)
-      await ctx.reply(`❌ ${err.message}`)
+      await ctx.reply('❌ הפעולה נכשלה. נסו שוב מאוחר יותר.')
     }
   }
 
   // /users — all program members with progress
   bot.command('users', adminOnly(async (ctx) => {
     const { status, data } = await bridge('/internal/admin/users')
-    if (status !== 200 || !data.ok) throw new Error(data.detail || 'Could not load users')
-    if (!data.users.length) return ctx.reply('No users registered yet.')
-    const lines = ['👥 <b>Program Members</b>', '']
+    if (status !== 200 || !data.ok) throw new Error(data.detail || 'לא ניתן לטעון משתמשים')
+    if (!data.users.length) return ctx.reply('אין משתמשים רשומים עדיין.')
+    const lines = ['👥 <b>משתתפי התוכנית</b>', '']
     for (const u of data.users) {
       const pct = u.avg_kr_pct ?? 0
       const dot = pct >= 70 ? '🟢' : pct >= 40 ? '🟡' : '🔴'
       const contact = esc(u.email || u.phone_number || '—')
       const last = u.last_session
-        ? new Date(u.last_session).toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })
-        : 'never'
+        ? new Date(u.last_session).toLocaleDateString('he-IL', { day: 'numeric', month: 'short', timeZone: 'Asia/Jerusalem' })
+        : 'אין'
       lines.push(`${dot} <b>${esc(u.name)}</b> (${contact})\n   KR avg: ${pct.toFixed(0)}% · ${u.objectives_count} OKRs · last: ${last}`)
     }
     await ctx.reply(lines.join('\n'), { parse_mode: 'HTML' })
@@ -252,18 +252,18 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
   // /report <user_id | phone | email | name>
   bot.command('report', adminOnly(async (ctx) => {
     const query = ctx.message.text.split(/\s+/).slice(1).join(' ').trim()
-    if (!query) return ctx.reply('Usage: /report <user_id | phone | email | name>')
+    if (!query) return ctx.reply('שימוש: /report <מזהה | טלפון | אימייל | שם>')
     const { status, data } = await bridge('/internal/admin/report', { query: { query } })
-    if (status === 404) return ctx.reply('User not found.')
+    if (status === 404) return ctx.reply('המשתמש לא נמצא.')
     if (status !== 200 || !data.ok) {
       if (data.error === 'ambiguous') {
         const names = (data.candidates || []).map(c => `• ${esc(c.name)} — <code>${c.user_id}</code>`).join('\n')
-        return ctx.reply(`Several users match. Be specific:\n${names}`, { parse_mode: 'HTML' })
+        return ctx.reply(`נמצאו כמה משתמשים. ציינו פרטים נוספים:\n${names}`, { parse_mode: 'HTML' })
       }
-      throw new Error(data.detail || 'Could not load the report')
+      throw new Error(data.detail || 'לא ניתן לטעון דוח')
     }
     const p = data.profile
-    const lines = [`📊 <b>Report — ${esc(p.name)}</b>`, '']
+    const lines = [`📊 <b>דוח - ${esc(p.name)}</b>`, '']
     for (const obj of data.objectives || []) {
       lines.push(`🎯 <b>${esc(obj.title)}</b>`)
       for (const kr of obj.key_results || []) {
@@ -275,12 +275,12 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
     }
     const highlights = data.weekly_plan?.daily_highlights || []
     if (highlights.length) {
-      lines.push('<b>This week\'s highlights:</b>')
+      lines.push('<b>נקודות בולטות השבוע:</b>')
       for (const h of highlights) lines.push(`  ${esc(String(h.day_of_week).slice(0, 3))}: ${esc(h.highlight)}`)
       lines.push('')
     }
     if ((data.recent_sessions || []).length) {
-      lines.push('<b>Recent sessions:</b>')
+      lines.push('<b>מפגשים אחרונים:</b>')
       for (const s of data.recent_sessions) {
         lines.push(`  ${String(s.timestamp).slice(0, 10)} [${String(s.alert_level).toUpperCase()}]: ${esc((s.summary_for_coach || '').slice(0, 80))}…`)
       }
@@ -295,9 +295,9 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
       method: 'POST',
       body: { name: args[0] || null, contact: args[1] || null },
     })
-    if (status !== 200 || !data.ok) throw new Error(data.detail || 'Could not create the invite')
+    if (status !== 200 || !data.ok) throw new Error(data.detail || 'לא ניתן ליצור הזמנה')
     await ctx.reply(
-      `✅ <b>Invite created</b>${args[0] ? ' for ' + esc(args[0]) : ''}!\n\nRegistration link:\n<code>${esc(data.register_url)}</code>\n\nToken: <code>${esc(data.token)}</code>`,
+      `✅ <b>נוצרה הזמנה</b>${args[0] ? ' עבור ' + esc(args[0]) : ''}.\n\nקישור הרשמה:\n<code>${esc(data.register_url)}</code>\n\nקוד הזמנה: <code>${esc(data.token)}</code>`,
       { parse_mode: 'HTML' },
     )
   }))
@@ -305,15 +305,15 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
   // /broadcast <text> — the bot sends the messages itself (it holds the live token)
   bot.command('broadcast', adminOnly(async (ctx) => {
     const text = ctx.message.text.split(/\s+/).slice(1).join(' ').trim()
-    if (!text) return ctx.reply('Usage: /broadcast <your message>')
+    if (!text) return ctx.reply('שימוש: /broadcast <הודעה>')
     const { status, data } = await bridge('/internal/admin/broadcast-targets')
-    if (status !== 200 || !data.ok) throw new Error(data.detail || 'Could not load recipients')
+    if (status !== 200 || !data.ok) throw new Error(data.detail || 'לא ניתן לטעון נמענים')
     let sent = 0, failed = 0
     for (const t of data.targets) {
       try {
         await bot.telegram.sendMessage(
           t.telegram_id,
-          `📢 <b>Message from Adi Ben Nesher:</b>\n\n${esc(text)}`,
+          `📢 <b>הודעה מעדי בן נשר:</b>\n\n${esc(text)}`,
           { parse_mode: 'HTML' },
         )
         sent++
@@ -322,6 +322,7 @@ export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
       }
       await new Promise(r => setTimeout(r, 100))  // stay well under Telegram rate limits
     }
-    await ctx.reply(`✅ Broadcast sent to ${sent} user(s)${failed ? ` · ${failed} failed` : ''}.`)
+    await ctx.reply(`✅ ההודעה נשלחה ל-${sent} משתמשים${failed ? ` · שליחה נכשלה ל-${failed}` : ''}.`)
   }))
+  return { startCoaching }
 }
