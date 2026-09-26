@@ -31,7 +31,14 @@ function allowedTag(raw) {
 }
 
 export function telegramHtml(value) {
-  const text = String(value ?? '')
+  // The bridge runs markdown_to_html(), which html.escape()s literal <b> tags
+  // emitted by the LLM. Decode only tag-shaped entities from our whitelist;
+  // allowedTag() below still validates attributes and link protocols.
+  const text = String(value ?? '').replace(/&lt;(\/?(?:b|i|u|s|a|code|pre|blockquote|tg-spoiler)(?:\s+[^<>]*?)?)&gt;/gi,
+    (entity, inside) => {
+      const tag = `<${inside}>`
+      return allowedTag(tag) ? tag : entity
+    })
   const stack = []
   let out = ''
   for (const token of text.match(/<[^>]*>|<|[^<]+/g) || []) {
