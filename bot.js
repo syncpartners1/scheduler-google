@@ -21,6 +21,7 @@
 import { Telegraf, Markup } from 'telegraf'
 import fetch from 'node-fetch'
 import { getBotSession, saveBotSession, clearBotSession } from './storage.js'
+import { registerCoachHandlers } from './coach.js'
 
 const BOT_TOKEN  = process.env.TELEGRAM_BOT_TOKEN
 const SERVER_URL = process.env.SERVER_URL || `http://127.0.0.1:${process.env.PORT || 3000}`
@@ -88,6 +89,10 @@ function formatDate(dateStr) {
 // ── Bot handlers ─────────────────────────────────────────────────────────────
 
 if (bot) {
+
+// Coaching mode + admin commands (must register before the booking text
+// handler so coaching messages are routed first; it calls next() to fall through)
+registerCoachHandlers(bot, { getBotSession, saveBotSession })
 
 // /start or /book — show date picker
 const showDatePicker = async (ctx) => {
