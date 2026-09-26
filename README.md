@@ -219,6 +219,13 @@ coaching. Coaching conversations are proxied to the AICOACH service through
 its internal bridge API (`/internal/telegram/*`, `X-Bridge-Secret` auth), so
 the coaching engine, session state, and history stay in AICOACH's Postgres.
 
+`/start` shows a Hebrew coaching entry screen based on the Firestore registration profile.
+Registered users start or resume a coaching session and can choose the existing booking flow. Visitors
+can begin registration or submit a lead for a virtual meeting/intro call. The bot
+asks for a name and the visitor's own Telegram contact, creates a ClickUp task,
+and sends Adi a Telegram alert. No appointment is booked. If ClickUp times out
+after submission, the lead is flagged for manual review instead of retried.
+
 User commands: `/coach` (or `/newsession`) start a session, free text chats,
 `/done` ends it with a summary, `/message` texts the human coach. Admin
 commands (gated by `ADMIN_TELEGRAM_ID`): `/users`, `/report <query>`,
@@ -228,6 +235,29 @@ user message routes the reply back to that user.
 Cloud Run deploy needs two extra secrets (`SCHEDULER_GOOGLE_AICOACH_BRIDGE_SECRET`,
 `SCHEDULER_GOOGLE_ADMIN_TELEGRAM_ID`) and the `AICOACH_URL` env var. The request
 timeout is 300s because coaching LLM turns can exceed 30s.
+
+The full Hebrew Telegram command menu is installed separately after deployment
+without changing the webhook:
+
+```bash
+TELEGRAM_BOT_TOKEN=... ADMIN_TELEGRAM_ID=... npm run telegram:set-commands
+```
+
+`ADMIN_TELEGRAM_ID` is optional for normal users but needed to publish the
+admin-only commands to Adi's private Telegram chat. Do not paste the token in
+logs or a chat. Deployment does not automatically update the menu.
+
+Lead setup: use existing Secret Manager secret `CLICKUP_API_KEY`
+(project `change-navigator-abn`). Grant `scheduler-sa` Secret Accessor on it,
+set GitHub Actions repository variable `CLICKUP_LEAD_LIST_ID` to the chosen
+ClickUp List ID, and deploy from main. The workflow injects
+`CLICKUP_API_TOKEN` and `CLICKUP_LEAD_LIST_ID` into Cloud Run. A Space ID
+alone is not enough for task creation. Confirm the exact destination List
+before deploy. A ClickUp task records name, phone, request type and Telegram
+ID; task link is included in the admin message when ClickUp returns one.
+Firestore collection `telegramLeads` stores a submission status and task ID
+for duplicate prevention and later reconciliation; grant the runtime identity
+Firestore access as with the existing `telegramBotSessions` collection.
 
 ## Telegram webhook and passwordless registration
 

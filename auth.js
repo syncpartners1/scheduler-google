@@ -98,7 +98,7 @@ async function sendTelegramRegistrationComplete(telegramId) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         chat_id: telegramId,
-        text: 'Registration complete - you can now /book',
+        text: 'ההרשמה הושלמה. שלחו /start כדי להתחיל אימון או לקבוע פגישה.',
         reply_markup: { remove_keyboard: true },
       }),
     })
