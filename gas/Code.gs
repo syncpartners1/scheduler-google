@@ -54,8 +54,37 @@ const OWNER_CALENDAR_ID = 'navigator.change@gmail.com'
 /** Timezone for your working hours (IANA format). */
 const OWNER_TZ = 'Asia/Jerusalem'
 
-/** Working hours in OWNER_TZ (24-hour, inclusive start, exclusive end). */
-const WORKING_HOURS = { start: 9, end: 21 }
+/** Client-facing coaching windows in OWNER_TZ; JS weekday 0=Sun ... 6=Sat.
+ * Keep in sync with availability.js. Own-calendar manual events are unaffected. */
+const COACHING_WINDOWS = {
+  1: { start: 18, end: 21 }, // Monday
+  2: { start: 18, end: 21 }, // Tuesday
+  4: { start: 18, end: 21 }, // Thursday
+  5: { start: 9, end: 15 },  // Friday
+}
+
+const HEBREW_DATE = new Intl.DateTimeFormat('en-u-ca-hebrew', {
+  timeZone: OWNER_TZ, day: 'numeric', month: 'long', year: 'numeric',
+})
+
+function isClosedHoliday(day) {
+  const parts = HEBREW_DATE.formatToParts(new Date(day + 'T12:00:00Z'))
+  const value = type => parts.find(part => part.type === type).value
+  return value('month') === 'Tishri' && [1, 2, 10].includes(Number(value('day')))
+}
+
+function isClientCoachingWindow(start, end) {
+  if (isNaN(start.getTime()) || isNaN(end.getTime()) || end <= start) return false
+  const day = Utilities.formatDate(start, OWNER_TZ, 'yyyy-MM-dd')
+  if (day !== Utilities.formatDate(end, OWNER_TZ, 'yyyy-MM-dd') || isClosedHoliday(day)) return false
+  const weekday = new Date(day + 'T12:00:00Z').getUTCDay()
+  const window = COACHING_WINDOWS[weekday]
+  if (!window) return false
+  const from = Utilities.formatDate(start, OWNER_TZ, 'HH:mm:ss')
+  const to = Utilities.formatDate(end, OWNER_TZ, 'HH:mm:ss')
+  return from >= String(window.start).padStart(2, '0') + ':00:00' &&
+         to <= String(window.end).padStart(2, '0') + ':00:00'
+}
 
 /** Buffer added before and after each existing event (minutes). */
 const BUFFER_MINS = 15
@@ -158,8 +187,7 @@ function getDiagnostics() {
     ok:          true,
     ts:          new Date().toISOString(),
     tz:          OWNER_TZ,
-    workHours:   WORKING_HOURS,
-    workDays:    'Sun–Fri (0–5)',
+    coachingWindows: COACHING_WINDOWS,
     calendarId:  OWNER_CALENDAR_ID.replace(/@.*/, '@…'),   // masked for safety
     bufferMins:  BUFFER_MINS,
     minNoticeH:  MIN_NOTICE_HOURS,
@@ -272,9 +300,9 @@ function createEvent(body) {
   const startTime = new Date(startISO)
   const endTime   = new Date(startTime.getTime() + Number(duration) * 60 * 1000)
 
-  // ── Working-day check (Sun–Fri only, no Saturdays) ───────
-  if (startTime.getUTCDay() === 6) {
-    return { ok: false, error: 'Meetings are not available on Saturdays.', code: 'ERR_SATURDAY' }
+  // Client-facing booking guard, even if the GAS endpoint is called directly.
+  if (!isClientCoachingWindow(startTime, endTime)) {
+    return { ok: false, error: 'Outside client coaching hours.', code: 'ERR_COACHING_HOURS' }
   }
 
   // ── Minimum notice check ─────────────────────────────────

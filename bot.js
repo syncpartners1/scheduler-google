@@ -20,6 +20,7 @@ import fetch from 'node-fetch'
 import { getBotSession, saveBotSession, clearBotSession, userRef } from './storage.js'
 import { registerCoachHandlers } from './coach.js'
 import { registerLeadHandlers } from './lead.js'
+import { windowForDate } from './availability.js'
 
 const BOT_TOKEN  = process.env.TELEGRAM_BOT_TOKEN
 const SERVER_URL = process.env.SERVER_URL || `http://127.0.0.1:${process.env.PORT || 3000}`
@@ -61,15 +62,14 @@ async function createBooking(payload) {
 /** Return next N working days as 'YYYY-MM-DD' strings */
 function nextWorkingDays(n = 7) {
   const days = []
-  const d    = new Date()
-  d.setDate(d.getDate() + 1)   // start from tomorrow
+  const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Jerusalem', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date())
+  const d = new Date(`${today}T12:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + 1)   // start from tomorrow in Jerusalem
 
   while (days.length < n) {
-    const dow = d.getDay()
-    if (dow !== 6) {  // work days are Sun-Fri; skip Saturday only
-      days.push(d.toISOString().slice(0, 10))
-    }
-    d.setDate(d.getDate() + 1)
+    const date = d.toISOString().slice(0, 10)
+    if (windowForDate(date)) days.push(date)
+    d.setUTCDate(d.getUTCDate() + 1)
   }
   return days
 }

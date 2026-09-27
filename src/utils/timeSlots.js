@@ -1,4 +1,5 @@
-import { WORKING_HOURS, BUFFER_MINS, MIN_NOTICE_HOURS, OWNER_TZ } from '../config.js'
+import { BUFFER_MINS, MIN_NOTICE_HOURS, OWNER_TZ } from '../config.js'
+import { windowForDate } from '../../availability.js'
 
 /**
  * Generate candidate time slots for a given date in the owner's timezone,
@@ -20,8 +21,10 @@ export function generateAvailableSlots(date, busySlots, userTz, duration = 30) {
 
   // Build the working-hours window in the owner's timezone for the selected date
   const dateStr = toDateString(date)   // 'YYYY-MM-DD' in local calendar
-  const workStart = parseInTz(`${dateStr}T${pad(WORKING_HOURS.start)}:00:00`, OWNER_TZ)
-  const workEnd   = parseInTz(`${dateStr}T${pad(WORKING_HOURS.end  )}:00:00`, OWNER_TZ)
+  const window = windowForDate(dateStr)
+  if (!window) return []
+  const workStart = parseInTz(`${dateStr}T${pad(window.start)}:00:00`, OWNER_TZ)
+  const workEnd   = parseInTz(`${dateStr}T${pad(window.end)}:00:00`, OWNER_TZ)
 
   // Busy slots are already buffered by GAS — use them directly.
   const busy = busySlots.map(b => ({
