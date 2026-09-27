@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
-import { MAX_DAYS_AHEAD, WORKING_DAYS } from '../config.js'
+import { MAX_DAYS_AHEAD } from '../config.js'
+import { windowForDate } from '../../availability.js'
 import { t } from '../i18n.js'
 
 function startOfDay(date) {
@@ -59,12 +60,14 @@ export default function CalendarPicker({ onSelect, lang = 'en' }) {
   const handleDayClick = (day) => {
     const selected = new Date(year, month, day)
     selected.setHours(0, 0, 0, 0)
-    if (selected >= today && selected <= maxDate) onSelect(selected)
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    if (selected >= today && selected <= maxDate && windowForDate(dateStr)) onSelect(selected)
   }
 
   const isDisabled = (day) => {
     const d = new Date(year, month, day)
-    return d < today || d > maxDate || !WORKING_DAYS.includes(d.getDay())
+    const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    return d < today || d > maxDate || !windowForDate(dateStr)
   }
 
   const isToday = (day) =>

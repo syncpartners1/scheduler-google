@@ -3,7 +3,7 @@
  *
  * Update these values to match your setup:
  *  1. Set GAS_URL after deploying your Google Apps Script web app
- *  2. Adjust WORKING_HOURS for your availability
+ *  2. Adjust COACHING_WINDOWS in availability.js for client-facing slots
  *  3. Update OWNER_NAME / OWNER_TZ if needed
  */
 
@@ -22,14 +22,8 @@ export const OWNER_NAME      = import.meta.env.VITE_OWNER_NAME      || 'Adi Ben-
 export const OWNER_PHOTO_URL = import.meta.env.VITE_OWNER_PHOTO_URL || '/adi.png'
 export const OWNER_TZ        = 'Asia/Jerusalem'  // owner's timezone
 
-// ── Working hours (in OWNER_TZ) ──────────────────────────────────────────────
-export const WORKING_HOURS = {
-  start: 9,   // 09:00
-  end:   21,  // 21:00
-}
-
-// ── Working days (JS getDay(): 0=Sun … 6=Sat) ────────────────────────────────
-export const WORKING_DAYS = [0, 1, 2, 3, 4, 5]  // Sun–Fri (no Saturday)
+// ── Client-facing coaching windows: shared with server.js ─────────────────────
+export { COACHING_WINDOWS } from '../availability.js'
 
 // ── Slot options (minutes) ───────────────────────────────────────────────────
 // Kept for any code that still references it; meeting type durations are the source of truth.

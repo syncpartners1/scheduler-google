@@ -21,6 +21,7 @@ import fetch             from 'node-fetch'
 import crypto            from 'crypto'
 import { bot }           from './bot.js'
 import { registerAuthRoutes } from './auth.js'
+import { windowForDate, isCoachingWindow } from './availability.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app       = express()
@@ -36,7 +37,6 @@ const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || ''
 // â”€â”€ Slot generation (mirrors src/utils/timeSlots.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 const OWNER_TZ       = 'Asia/Jerusalem'
-const WORKING_HOURS  = { start: 9, end: 21 }
 const BUFFER_MINS    = 15
 const MIN_NOTICE_HRS = 2
 
@@ -76,8 +76,10 @@ function generateAvailableSlots(dateStr, busySlots, userTz, duration) {
   const now     = new Date()
   const cutoff  = new Date(now.getTime() + MIN_NOTICE_HRS * 60 * 60 * 1000)
 
-  const workStart = parseInTz(`${dateStr}T${pad(WORKING_HOURS.start)}:00:00`, OWNER_TZ)
-  const workEnd   = parseInTz(`${dateStr}T${pad(WORKING_HOURS.end)}:00:00`,   OWNER_TZ)
+  const window = windowForDate(dateStr)
+  if (!window) return []
+  const workStart = parseInTz(`${dateStr}T${pad(window.start)}:00:00`, OWNER_TZ)
+  const workEnd   = parseInTz(`${dateStr}T${pad(window.end)}:00:00`,   OWNER_TZ)
 
   // Busy blocks are already buffered by GAS â€” use them directly.
   const busy = busySlots.map(b => ({
@@ -224,6 +226,10 @@ app.post('/api/book', requireApiKey, async (req, res) => {
   }
   if (!GAS_URL) {
     return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
+  }
+
+  if (!isCoachingWindow(startISO, duration)) {
+    return res.status(400).json({ ok: false, error: 'Outside client coaching hours', code: 'ERR_COACHING_HOURS' })
   }
 
   const requestId = req.body.requestId || `${email}-${startISO}-${Date.now()}`
@@ -377,6 +383,9 @@ app.post('/api/public/book', async (req, res) => {
   if (!name || !email || !startISO || !duration) {
     return res.status(400).json({ ok: false, error: 'Missing required fields: name, email, startISO, duration' })
   }
+  if (!isCoachingWindow(startISO, duration)) {
+    return res.status(400).json({ ok: false, error: 'Outside client coaching hours', code: 'ERR_COACHING_HOURS' })
+  }
   if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
   try {
     const gasRes = await fetch(GAS_URL, {
@@ -435,6 +444,10 @@ app.post('/api/admin/reschedule', requireApiKey, async (req, res) => {
   const { eventId, name, email, subject, newStartISO, duration, userTz } = req.body
   if (!eventId || !newStartISO || !duration) {
     return res.status(400).json({ ok: false, error: 'Missing required fields: eventId, newStartISO, duration' })
+  }
+  // Check before cancelling the old booking; GAS enforces the same rule on creation.
+  if (!isCoachingWindow(newStartISO, duration)) {
+    return res.status(400).json({ ok: false, error: 'Outside client coaching hours', code: 'ERR_COACHING_HOURS' })
   }
   if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
 
