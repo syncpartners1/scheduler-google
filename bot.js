@@ -126,9 +126,8 @@ const registeredOptions = Markup.inlineKeyboard([
   [Markup.button.callback('לקבוע פגישה', 'home:book')],
 ])
 const guestOptions = Markup.inlineKeyboard([
+  [Markup.button.url('למילוי שאלון המוכנות', 'https://changenavigator.web.app/qualify-form')],
   [Markup.button.callback('להירשם לאימון', 'home:register')],
-  [Markup.button.callback('פגישה וירטואלית', 'home:virtual')],
-  [Markup.button.callback('שיחת היכרות', 'home:call')],
 ])
 
 bot.start(async (ctx) => {
@@ -147,7 +146,7 @@ bot.start(async (ctx) => {
     return startCoaching(ctx)
   }
   return ctx.reply(
-    'שלום, אני הבוט של עדי בן נשר, מאמן לשינוי אישי, כלכלי ועסקי. האימון מתחיל בהיכרות עם היעדים והאתגרים שלכם, וממשיך בשיחה אישית על הצעדים הבאים. אפשר להירשם, או להשאיר פנייה לפגישה וירטואלית או לשיחת היכרות. לא נקבע זמן אוטומטית.',
+    'שלום, אני הבוט של עדי בן נשר, מאמן לשינוי אישי, כלכלי ועסקי. כדי שנוכל להכיר את היעדים והאתגרים שלכם לפני שיחת ההיכרות, מלאו את שאלון המוכנות הקצר. עדי יבדוק את הפנייה ויחזור אליכם לגבי השלב הבא. אם אתם כבר מצטרפים לתוכנית, אפשר גם להירשם לאימון.',
     guestOptions,
   )
 })
