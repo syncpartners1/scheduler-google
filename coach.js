@@ -24,6 +24,7 @@
  */
 
 import fetch from 'node-fetch'
+import { registerTaskHandlers } from './task-routing.js'
 import { userRef } from './storage.js'
 import { sendBridgeHtml } from './telegram-html.js'
 
@@ -77,6 +78,7 @@ const esc = (s) => String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').
 // ── Public handlers ───────────────────────────────────────────────────────────
 
 export function registerCoachHandlers(bot, { getBotSession, saveBotSession }) {
+  registerTaskHandlers(bot, { bridge, getBotSession, sendHtml: sendBridgeHtml })
 
   const requireProfile = async (ctx) => {
     const profile = await firestoreProfile(ctx.from.id)
