@@ -91,7 +91,14 @@ export default function App() {
 
   const handleBooking = useCallback(async (formData) => {
     const { name, email, subject, locationMode, meetingLocation } = formData
-    const requestId = `${email}-${selectedSlot.start}-${Date.now()}`
+    // Preserve intent across transport retries/reload; changed booking details
+    // get a new key. No attendee details are used as the storage key.
+    const identity = JSON.stringify([name,email,subject,selectedSlot.start,meetingType.id,locationMode,meetingLocation,userTz])
+    const stored = sessionStorage.getItem('booking-intent')
+    let previous
+    try { previous = stored ? JSON.parse(stored) : null } catch { previous = null }
+    const requestId = previous?.identity === identity ? previous.requestId : crypto.randomUUID()
+    sessionStorage.setItem('booking-intent',JSON.stringify({identity,requestId}))
 
     const body = {
       name, email, subject,

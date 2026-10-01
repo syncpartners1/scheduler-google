@@ -22,6 +22,8 @@ import crypto            from 'crypto'
 import { bot }           from './bot.js'
 import { registerAuthRoutes } from './auth.js'
 import { windowForDate, isCoachingWindow } from './availability.js'
+import { db } from './storage.js'
+import { makeBookingOutbox } from './booking-outbox.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app       = express()
@@ -33,6 +35,16 @@ const GAS_URL   =
 const API_KEY   = process.env.API_KEY || ''
 const TELEGRAM_WEBHOOK_PATH = process.env.TELEGRAM_WEBHOOK_PATH || ''
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || ''
+
+const bookingOutbox = makeBookingOutbox({db,fetch,gasUrl:GAS_URL,
+  receiverUrl:process.env.AICOACH_URL || '',bridgeSecret:process.env.AICOACH_BRIDGE_SECRET || ''})
+
+// Existing calendar success is returned even if secondary notification write or
+// delivery fails. Never log attendee details or the GAS capability requestId.
+async function recordConfirmedBooking(intent,data) {
+  try { await bookingOutbox.confirm(intent,data); await bookingOutbox.deliver(intent.ref) }
+  catch(error) { console.error('[booking-notification] confirmed event needs reconciliation') }
+}
 
 // â”€â”€ Slot generation (mirrors src/utils/timeSlots.js) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -234,17 +246,25 @@ app.post('/api/book', requireApiKey, async (req, res) => {
 
   const requestId = req.body.requestId || `${email}-${startISO}-${Date.now()}`
 
+  let intent
+  try {
+    intent=await bookingOutbox.prepare({...req.body,requestId:req.body.requestId || crypto.randomUUID()})
+  } catch(error) {
+    return res.status(503).json({ok:false,error:'Booking preparation unavailable; no calendar request sent'})
+  }
   try {
     const gasRes = await fetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
-      body:    JSON.stringify({ action: 'createEvent', name, email, subject, startISO, duration, userTz, requestId }),
+      body:    JSON.stringify({ action: 'createEvent', ...intent.input, requestId:intent.gasRequestId }),
       signal:  AbortSignal.timeout(20000),
     })
     const data = await gasRes.json()
-    if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Booking failed' })
+    if (!data.ok) { await bookingOutbox.failed(intent,['ERR_EXCEPTION','ERR_BOOKING_BUSY'].includes(data.code)).catch(()=>{}); return res.status(502).json({ ok: false, error: data.error || 'Booking failed' }) }
+    await recordConfirmedBooking(intent,data)
     res.json(data)
   } catch (err) {
+    await bookingOutbox.failed(intent,true).catch(()=>{})
     res.status(502).json({ ok: false, error: err.message })
   }
 })
@@ -387,6 +407,12 @@ app.post('/api/public/book', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'Outside client coaching hours', code: 'ERR_COACHING_HOURS' })
   }
   if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
+  let intent
+  try {
+    intent=await bookingOutbox.prepare({...req.body,requestId:req.body.requestId || crypto.randomUUID()})
+  } catch(error) {
+    return res.status(503).json({ok:false,error:'Booking preparation unavailable; no calendar request sent'})
+  }
   try {
     const gasRes = await fetch(GAS_URL, {
       method:  'POST',
@@ -399,14 +425,16 @@ app.post('/api/public/book', async (req, res) => {
         meetingTypeLabel: meetingTypeLabel || '',
         locationMode:     locationMode     || 'virtual',
         location:         location         || '',
-        requestId:        requestId        || `${email}-${startISO}-${Date.now()}`,
+        requestId:        intent.gasRequestId,
       }),
       signal: AbortSignal.timeout(20000),
     })
     const data = await gasRes.json()
-    if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Booking failed' })
+    if (!data.ok) { await bookingOutbox.failed(intent,['ERR_EXCEPTION','ERR_BOOKING_BUSY'].includes(data.code)).catch(()=>{}); return res.status(502).json({ ok: false, error: data.error || 'Booking failed' }) }
+    await recordConfirmedBooking(intent,data)
     res.json(data)
   } catch (err) {
+    await bookingOutbox.failed(intent,true).catch(()=>{})
     res.status(502).json({ ok: false, error: err.message })
   }
 })
@@ -418,6 +446,13 @@ app.post('/api/public/book', async (req, res) => {
  * Calls GAS with action=getAllBookings â€” requires that action in the GAS script.
  * Protected by X-Api-Key header or ?apiKey= query param.
  */
+// Invoke via an explicitly reviewed Cloud Scheduler HTTP job, not an idle
+// Cloud Run timer. POST only and existing API-key authentication.
+app.post('/api/admin/booking-notifications/drain',requireApiKey,async(req,res)=>{
+  try { res.json(await bookingOutbox.drain()) }
+  catch(error) { res.status(503).json({ok:false,error:'Notification drain unavailable'}) }
+})
+
 app.get('/api/admin/bookings', requireApiKey, async (req, res) => {
   if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
   try {

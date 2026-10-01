@@ -153,8 +153,9 @@ function handleRequest(e, body) {
   try {
     let result
     switch (action) {
+      case 'lookupNotificationBooking': result = lookupNotificationBooking(body); break
       case 'getBusySlots':   result = getBusySlots(params); break
-      case 'createEvent':    result = createEvent(body);    break
+      case 'createEvent':    result = createEventWithNotificationLock(body);    break
       case 'cancelEvent':    result = cancelEvent(body);    break
       case 'getBookings':    result = getBookings(params);  break
       case 'getAllBookings':  result = getAllBookings(params); break
@@ -184,6 +185,7 @@ function handleRequest(e, body) {
  */
 function getDiagnostics() {
   return {
+    notificationContractVersion: 1,
     ok:          true,
     ts:          new Date().toISOString(),
     tz:          OWNER_TZ,
@@ -318,6 +320,7 @@ function createEvent(body) {
       const meetLink = getMeetLinkFromEvent(existing)
       return {
         ok:       true,
+        created:  false,
         eventId:  existing.getId(),
         meetLink: meetLink,
         startISO: existing.getStartTime().toISOString(),
@@ -438,6 +441,7 @@ function createEvent(body) {
   })
 
   return {
+    created: true,
     ok:       true,
     eventId:  createdEvent.id,
     meetLink: meetLink,
@@ -873,4 +877,31 @@ function getMeetLinkFromEvent(event) {
   const desc  = event.getDescription() || ''
   const match = desc.match(/https:\/\/meet\.google\.com\/[a-z-]+/)
   return match ? match[0] : null
+}
+
+
+/** Read-only capability lookup for notification reconciliation.
+ * Only new high-entropy server-generated keys are accepted. Never creates or
+ * cancels a calendar event. The key remains server-side, not in public response.
+ */
+function lookupNotificationBooking(body) {
+  if (!body || !/^notify_[a-f0-9]{32}$/.test(body.requestId || ''))
+    return {ok:false,error:'Invalid notification capability'}
+  const start=new Date(body.startISO)
+  if (isNaN(start.getTime()))return {ok:false,error:'Invalid date'}
+  const event=findEventByRequestId(body.requestId,start)
+  if(!event)return {ok:true,found:false}
+  return {ok:true,found:true,eventId:event.getId(),meetLink:getMeetLinkFromEvent(event) || '',
+          startISO:event.getStartTime().toISOString(),endISO:event.getEndTime().toISOString()}
+}
+
+
+/** Serialize notification-intent creation/idempotency checks. Existing other
+ * booking callers retain their current behavior. Never hold lock in lookup.
+ */
+function createEventWithNotificationLock(body) {
+  if (!body || !/^notify_[a-f0-9]{32}$/.test(body.requestId || '')) return createEvent(body)
+  const lock = LockService.getScriptLock()
+  if (!lock.tryLock(10000)) return {ok:false,error:'Booking busy; retry same request',code:'ERR_BOOKING_BUSY'}
+  try { return createEvent(body) } finally { lock.releaseLock() }
 }
