@@ -12,7 +12,7 @@ ENV NODE_ENV=production
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci --omit=dev && npm cache clean --force
-COPY server.js bot.js coach.js task-routing.js telegram-html.js lead.js telegram-commands.js auth.js storage.js availability.js ./
+COPY server.js bot.js coach.js task-routing.js telegram-html.js lead.js telegram-commands.js auth.js storage.js availability.js booking-outbox.js ./
 COPY --from=build /app/dist ./dist
 USER node
 EXPOSE 8080
