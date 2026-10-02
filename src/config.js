@@ -61,6 +61,16 @@ export const MEETING_TYPES = [
     defaultMode: 'hybrid',
   },
   {
+    // Not listed in the public picker; reached only through ?type=diagnostic_60
+    // (coach-opened link from the AICOACH leads screen).
+    id:          'diagnostic_60',
+    label:       'Diagnostic meeting',
+    subtitle:    'Diagnostic meeting',
+    duration:    60,
+    defaultMode: 'virtual',
+    hidden:      true,
+  },
+  {
     id:          'coaching_60',
     label:       '60 min · Coaching / Advisory',
     subtitle:    'Paid session',

@@ -5,6 +5,7 @@ import BookingForm        from './components/BookingForm.jsx'
 import ConfirmationScreen from './components/ConfirmationScreen.jsx'
 import { GAS_URL, OWNER_NAME, OWNER_PHOTO_URL, DEFAULT_MEETING_TYPE, MEETING_TYPES } from './config.js'
 import { saveBooking }    from './supabaseClient.js'
+import { readPrefill }    from './prefill.js'
 import { t }              from './i18n.js'
 
 // Detect if we are embedded as an iframe (Wix or other)
@@ -38,12 +39,16 @@ export default function App() {
   )
 
   // Lifted form state — preserved when user goes back to change time slot
-  const [formData, setFormData] = useState({
-    name:            '',
-    email:           '',
-    subject:         '',
-    locationMode:    DEFAULT_MEETING_TYPE.defaultMode,
-    meetingLocation: '',
+  const [formData, setFormData] = useState(() => {
+    // Optional ?name=&email=&subject= pre-fill (editable) for coach-opened links.
+    const pre = readPrefill(window.location.search)
+    return {
+      name:            pre.name,
+      email:           pre.email,
+      subject:         pre.subject,
+      locationMode:    detectMeetingType().defaultMode,
+      meetingLocation: '',
+    }
   })
 
   const isRTL = lang === 'he'

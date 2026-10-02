@@ -49,7 +49,7 @@ export default function TimeSlotPicker({
           {t(lang, 'meeting_type_lbl')}
         </p>
         <div className="space-y-1.5">
-          {MEETING_TYPES.map(mt => {
+          {MEETING_TYPES.filter(mt => !mt.hidden || mt.id === meetingType.id).map(mt => {
             const active = meetingType.id === mt.id
             const label  = t(lang, `mt_${mt.id}_label`)
             const sub    = t(lang, `mt_${mt.id}_sub`)
