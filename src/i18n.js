@@ -36,6 +36,8 @@ const strings = {
     mt_virtual_30_sub:    'Online only',
     mt_general_60_label:  '60 min · General',
     mt_general_60_sub:    'Extended meeting',
+    mt_diagnostic_60_label: 'Diagnostic meeting',
+    mt_diagnostic_60_sub:   'Free, no commitment',
     mt_coaching_60_label: '60 min · Coaching / Advisory',
     mt_coaching_60_sub:   'Paid session',
 
@@ -120,6 +122,8 @@ const strings = {
     mt_virtual_30_sub:    'אונליין בלבד',
     mt_general_60_label:  '60 דק׳ · כללי',
     mt_general_60_sub:    'פגישה מורחבת',
+    mt_diagnostic_60_label: 'פגישת איבחון',
+    mt_diagnostic_60_sub:   'ללא עלות וללא התחייבות',
     mt_coaching_60_label: '60 דק׳ · אימון / ייעוץ',
     mt_coaching_60_sub:   'פגישה בתשלום',
 
