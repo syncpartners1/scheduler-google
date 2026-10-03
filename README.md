@@ -1,126 +1,114 @@
-# Scheduling App — Calendly Alternative
+# Scheduler: Change Navigator booking, registration and Telegram bot
 
-A professional scheduling PWA that replaces Calendly by booking meetings directly into Google Calendar with automatic Google Meet links.
+Booking app that books meetings straight into Google Calendar with a Google Meet link,
+plus the Telegram bot `@Change_navigator_bot` and passkey registration. It runs on
+Google Cloud. It replaces Calendly.
 
-## Features
+## What it does
 
-- **Monthly calendar** to select a date
-- **30 or 60-minute slots** based on configurable working hours (09:00–18:00 Israel time)
-- **Busy-slot filtering** — pulls existing events from your Google Calendar
-- **Automatic Google Meet link** on every booking
-- **Timezone-aware** — visitors see times in their local timezone
-- **Booking form** with name, email, and meeting subject
-- **Confirmation screen** with "Add to Calendar" (.ics) and "Copy Meet Link"
-- **Telegram bot** — book meetings directly in Telegram
-- **REST API** — integrate with any other app (Wix Velo, webhooks, etc.)
-- **Wix iframe** — embed directly in your Wix site
-- **Supabase** — booking records stored for admin review
-
----
+- Monthly calendar, 30 or 60 minute slots, busy slots read from the Google Calendar
+- Booking form (name, email, subject), Meet link on every booking, `.ics` download
+- Client coaching meetings are limited to approved windows and holidays (`availability.js`).
+  The owner's own calendar stays open
+- Hebrew and English UI, URL parameters `lang`, `type`, `embed` (see `EMBED.md`)
+- Telegram bot: registration, booking, AI coaching through AICOACH, lead capture
+- Passwordless registration with passkeys (WebAuthn)
+- Booking notification emails sent from this service, with a durable outbox
+- REST API for other apps
 
 ## Architecture
 
 ```
-Browser (React PWA)
-    ├── GAS API  →  Google Apps Script  →  Google Calendar
-    └── Supabase JS client  →  Supabase (booking log)
-
-Express.js (Railway)
-    ├── Serves React build (dist/)
-    └── /api/* REST proxy (requires X-Api-Key)
-
-Telegram Bot (Railway — separate process)
-    └── Uses /api/* endpoints internally
+Browser (React PWA, built into dist/)
+    |
+    v
+Cloud Run service "scheduler-google" (me-west1, Express, scale to zero)
+    |-- serves the React build and /api/*
+    |-- /telegram/<secret path>   Telegram webhook (secret header checked)
+    |-- passkey registration and /register, /passkey/continue
+    |-- Google Apps Script web app --> Google Calendar (navigator.change@gmail.com)
+    |                              --> Google Sheet (booking log)
+    |-- Firestore: users, passkeys, authFlows, telegramBotSessions,
+    |              telegramLeads, bookingNotificationOutbox
+    |-- AICOACH (https://app.changenavigator.co.il), internal bridge /internal/telegram/*
+    |-- ClickUp (lead tasks), Brevo (email)
 ```
 
----
+- Public hosts: `auth.changenavigator.co.il` is the WebAuthn origin (registration and
+  passkeys). `meet.changenavigator.co.il` is the public booking link and redirects to the
+  booking page.
+- The Telegram bot runs inside the same Cloud Run service through a webhook. There is
+  no separate bot process.
+- Calendar logic stays in Google Apps Script (`gas/Code.gs`). It is not rewritten.
+- Supabase is not used. Bookings are logged to a Google Sheet by the script.
+- Railway is retired. The old Railway instance is off.
 
-## Quick Start (Local Development)
+## Local development
 
 ```bash
-cd scheduling-app
-cp .env.example .env          # fill in your values
+cp .env.example .env     # fill in your values
 npm install
-npm run dev                   # http://localhost:5173
+npm run dev              # Vite on http://localhost:5173
+npm start                # Express server (needs a built dist/)
 ```
 
----
+Tests are the `*.test.mjs` files in the repo root and run with `node --test`.
 
-## Deployment on Railway
+## Google Apps Script
 
-1. Push this repo to GitHub (`syncpartners1/scheduler-google`)
-2. Create a new Railway project → **Deploy from GitHub repo**
-3. Set environment variables (copy from `.env.example`)
-4. Railway auto-builds and deploys on every push
+See `gas/Code.gs` for the inline setup notes.
 
-The `railway.toml` configures the build and start commands automatically.
+1. Open https://script.google.com signed in as `navigator.change@gmail.com`
+2. Paste `gas/Code.gs`
+3. Enable the Advanced Calendar service (Services in the editor) and authorize it
+4. Deploy > New deployment > Web app (Execute as: Me, Access: Anyone)
+5. Save the `/exec` URL in the Secret Manager secret `SCHEDULER_GOOGLE_GAS_URL`
 
-### Running the Telegram Bot
+The Google Sheet used as booking log must be shared with `navigator.change@gmail.com`
+as Editor, or logging fails silently. `testSheetAccess` in the script checks this.
 
-Railway supports multiple processes. The `Procfile` defines:
-- `web` — Express server (main app)
-- `bot` — Telegram bot
-
-Both start automatically on Railway when you deploy.
-
----
-
-## Google Apps Script Setup
-
-See `gas/Code.gs` for full inline setup instructions.
-
-**Short version:**
-1. Go to https://script.google.com → New project
-2. Paste `gas/Code.gs` content
-3. Set `OWNER_CALENDAR_ID` to your Gmail address
-4. Enable **Google Calendar API** (Extensions → Services)
-5. Deploy → New deployment → **Web App** (Execute as: Me, Access: Anyone)
-6. Copy the Web App URL → set as `VITE_GAS_URL` and `GAS_URL` in Railway
-
----
-
-## Supabase Setup
-
-Run `supabase/migrations/001_create_bookings.sql` in your Supabase SQL Editor.
-
-The table stores booking records with Row Level Security:
-- **Anon** can INSERT (the React app uses the anon key)
-- **Authenticated** (admin) can SELECT
-
----
+When you change a production function, create a new version of the existing
+deployment so the `/exec` URL stays the same.
 
 ## REST API
 
-All `/api/*` endpoints require `X-Api-Key: YOUR_API_KEY` header.
+Endpoints under `/api/*` that need a key take the header `X-Api-Key: <API_KEY>`.
 
-| Method | Path | Description |
-|--------|------|-------------|
-| `GET` | `/api/health` | Liveness check |
-| `GET` | `/api/slots?date=YYYY-MM-DD&tz=...&duration=30` | Available slots |
-| `POST` | `/api/book` | Create a booking |
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| `GET` | `/api/health` | none | Liveness check (used by the deploy workflow) |
+| `GET` | `/api/slots?date=YYYY-MM-DD&tz=...&duration=30` | key | Available slots |
+| `POST` | `/api/book` | key | Create a booking |
+| `POST` | `/api/cancel` | key | Cancel a booking |
+| `GET` | `/api/bookings` | key | List bookings |
+| `GET` | `/api/public/slots` | none | Slots for the public booking page |
+| `POST` | `/api/public/book` | none | Booking from the public page |
+| `GET` | `/api/admin/bookings` | key | Admin booking list |
+| `POST` | `/api/admin/reschedule` | key | Admin reschedule |
+| `POST` | `/api/admin/booking-notifications/drain` | key | Send pending booking emails (called by a Cloud Scheduler job every 5 minutes) |
 
-**POST /api/book body:**
+`POST /api/book` body:
+
 ```json
 {
   "name": "Jane Smith",
   "email": "jane@example.com",
   "subject": "Product demo",
-  "startISO": "2024-01-15T10:00:00.000Z",
+  "startISO": "2026-01-15T10:00:00.000Z",
   "duration": 30,
   "userTz": "America/New_York",
   "requestId": "optional-idempotency-key"
 }
 ```
 
----
+## Wix iframe
 
-## Wix Iframe Integration
-
-Add an **HTML Embed** element to your Wix page:
+Embed the booking page with an HTML Embed element. Use the current booking link,
+not the old Railway address:
 
 ```html
 <iframe
-  src="https://YOUR-APP.railway.app?embed=true"
+  src="https://meet.changenavigator.co.il/?embed=true"
   width="100%"
   height="700px"
   style="border: none;"
@@ -128,11 +116,10 @@ Add an **HTML Embed** element to your Wix page:
 ></iframe>
 ```
 
-The app detects the `embed=true` param and switches to a compact layout without header/footer.
+With `embed=true` the app drops the header and footer. After a booking it sends a
+`postMessage` to the parent page:
 
-On successful booking, it fires a `postMessage` to the parent Wix page:
 ```js
-// In your Wix Velo code:
 window.addEventListener('message', (e) => {
   if (e.data.type === 'BOOKING_SUCCESS') {
     console.log('Booking confirmed:', e.data.booking)
@@ -140,37 +127,30 @@ window.addEventListener('message', (e) => {
 })
 ```
 
----
+## Environment variables
 
-## Telegram Bot
+Secrets come from Secret Manager in production (see the deploy section).
+Do not put real values in the repo.
 
-1. Create a bot via [@BotFather](https://t.me/BotFather) → `/newbot`
-2. Copy the token → set `TELEGRAM_BOT_TOKEN` env var
-3. Set `SERVER_URL` to your Railway app URL
-
-Users chat with your bot:
-- `/start` or `/book` — begin booking flow
-- Pick date → pick duration → pick time slot → enter details → confirmation
-
----
-
-## Environment Variables
-
-| Variable | Required | Description |
-|----------|----------|-------------|
-| `VITE_GAS_URL` | Yes | GAS Web App URL (Vite build) |
-| `GAS_URL` | Yes | GAS Web App URL (server-side) |
-| `VITE_SUPABASE_URL` | Optional | Supabase project URL |
-| `VITE_SUPABASE_ANON_KEY` | Optional | Supabase anon key |
-| `VITE_OWNER_NAME` | Optional | Your name (shown in header) |
-| `API_KEY` | Recommended | Protects `/api/*` endpoints |
-| `TELEGRAM_BOT_TOKEN` | Optional | Enable Telegram bot |
-| `SERVER_URL` | If using bot | Public Railway URL for bot→API calls |
-| `AICOACH_URL` | For coaching | Base URL of the AICOACH service (coaching bridge) |
-| `AICOACH_BRIDGE_SECRET` | For coaching | Must match `TELEGRAM_BRIDGE_SECRET` on AICOACH |
-| `ADMIN_TELEGRAM_ID` | For coaching | Telegram user ID allowed to use admin commands |
-
----
+| Variable | Source in production | Description |
+|----------|----------------------|-------------|
+| `GAS_URL` | secret | Apps Script web app URL, server side |
+| `VITE_GAS_URL` | local only | Same URL for the Vite build when developing |
+| `API_KEY` | secret | Protects `/api/*` endpoints that need a key |
+| `TELEGRAM_BOT_TOKEN` | secret | Telegram bot token |
+| `TELEGRAM_WEBHOOK_PATH` | secret | Secret path of the webhook |
+| `TELEGRAM_WEBHOOK_SECRET` | secret | Checked against `X-Telegram-Bot-Api-Secret-Token` |
+| `BREVO_API_KEY` | secret | Sends booking and registration emails |
+| `AICOACH_BRIDGE_SECRET` | secret | Must match `TELEGRAM_BRIDGE_SECRET` on AICOACH |
+| `ADMIN_TELEGRAM_ID` | secret | Telegram ID allowed to use admin commands |
+| `CLICKUP_API_TOKEN` | secret `CLICKUP_API_KEY` | Creates lead tasks |
+| `CLICKUP_LEAD_LIST_ID` | GitHub Actions variable | ClickUp List that receives leads |
+| `AICOACH_URL` | env | `https://app.changenavigator.co.il` |
+| `WEBAUTHN_RP_ID` | env | `changenavigator.co.il` |
+| `WEBAUTHN_ORIGIN` | env | `https://auth.changenavigator.co.il` |
+| `SERVER_URL` | env | Internal URL the bot uses to call `/api/*` (`http://127.0.0.1:8080` on Cloud Run) |
+| `VITE_GOOGLE_MAPS_API_KEY` | build secret | Places autocomplete in the browser. Restrict by HTTPS referrer |
+| `VITE_OWNER_NAME` | optional | Name shown in the header |
 
 ## Constraints & Edge Cases
 
@@ -208,9 +188,9 @@ deployed that web app. Deploy `gas/Code.gs` while signed in as
 `navigator.change@gmail.com`, enable the Advanced Calendar service, authorize it,
 and save the resulting `/exec` URL in `SCHEDULER_GOOGLE_GAS_URL`.
 
-Cloud Scheduler is not used: this application is request-driven, not a cron job.
-The optional Telegram bot still uses long polling and is not started by the Cloud
-Run web image. Move it to Telegram webhooks before retiring a live Railway bot.
+Cloud Scheduler has one job: it calls `/api/admin/booking-notifications/drain` every
+5 minutes to send booking emails that are still pending. The rest of the app is
+request driven. The Telegram bot uses webhooks, not long polling, so scale to zero is safe.
 
 ## Telegram coaching mode (consolidated bot)
 
