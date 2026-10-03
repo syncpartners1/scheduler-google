@@ -24,6 +24,7 @@ import { registerAuthRoutes } from './auth.js'
 import { windowForDate, isCoachingWindow } from './availability.js'
 import { db } from './storage.js'
 import { makeBookingOutbox } from './booking-outbox.js'
+import { normalizePhone } from './phone.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const app       = express()
@@ -236,6 +237,12 @@ app.post('/api/book', requireApiKey, async (req, res) => {
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return res.status(400).json({ ok: false, error: 'Invalid email address' })
   }
+  // Optional here (internal callers), but a number that is given must be valid.
+  if (req.body.phone) {
+    const phone = normalizePhone(req.body.phone)
+    if (!phone) return res.status(400).json({ ok: false, error: 'Invalid phone number', code: 'ERR_PHONE' })
+    req.body.phone = phone
+  }
   if (!GAS_URL) {
     return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
   }
@@ -403,6 +410,12 @@ app.post('/api/public/book', async (req, res) => {
   if (!name || !email || !startISO || !duration) {
     return res.status(400).json({ ok: false, error: 'Missing required fields: name, email, startISO, duration' })
   }
+  // Phone is required on the public booking page and saved as E.164.
+  const phone = normalizePhone(req.body.phone)
+  if (!phone) {
+    return res.status(400).json({ ok: false, error: 'A valid phone number is required', code: 'ERR_PHONE' })
+  }
+  req.body.phone = phone
   if (!isCoachingWindow(startISO, duration)) {
     return res.status(400).json({ ok: false, error: 'Outside client coaching hours', code: 'ERR_COACHING_HOURS' })
   }

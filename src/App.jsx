@@ -45,6 +45,7 @@ export default function App() {
     return {
       name:            pre.name,
       email:           pre.email,
+      phone:           '',
       subject:         pre.subject,
       locationMode:    detectMeetingType().defaultMode,
       meetingLocation: '',
@@ -95,10 +96,10 @@ export default function App() {
   }, [selectedDate, meetingType, fetchBusySlots])
 
   const handleBooking = useCallback(async (formData) => {
-    const { name, email, subject, locationMode, meetingLocation } = formData
+    const { name, email, phone, subject, locationMode, meetingLocation } = formData
     // Preserve intent across transport retries/reload; changed booking details
     // get a new key. No attendee details are used as the storage key.
-    const identity = JSON.stringify([name,email,subject,selectedSlot.start,meetingType.id,locationMode,meetingLocation,userTz])
+    const identity = JSON.stringify([name,email,phone,subject,selectedSlot.start,meetingType.id,locationMode,meetingLocation,userTz])
     const stored = sessionStorage.getItem('booking-intent')
     let previous
     try { previous = stored ? JSON.parse(stored) : null } catch { previous = null }
@@ -106,7 +107,7 @@ export default function App() {
     sessionStorage.setItem('booking-intent',JSON.stringify({identity,requestId}))
 
     const body = {
-      name, email, subject,
+      name, email, phone, subject,
       startISO:         selectedSlot.start,
       duration:         meetingType.duration,
       meetingTypeId:    meetingType.id,
@@ -181,6 +182,7 @@ export default function App() {
     setFormData({
       name:            '',
       email:           '',
+      phone:           '',
       subject:         '',
       locationMode:    DEFAULT_MEETING_TYPE.defaultMode,
       meetingLocation: '',

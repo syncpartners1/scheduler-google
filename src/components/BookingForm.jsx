@@ -1,8 +1,9 @@
 import { useState } from 'react'
-import { ChevronLeft, Loader2, User, Mail, MessageSquare, Video, Globe2, MapPin, AlertCircle } from 'lucide-react'
+import { ChevronLeft, Loader2, User, Mail, Phone, MessageSquare, Video, Globe2, MapPin, AlertCircle } from 'lucide-react'
 import { formatDateTimeInTz } from '../utils/timeSlots.js'
 import { OWNER_TZ } from '../config.js'
 import { t } from '../i18n.js'
+import { normalizePhone } from '../../phone.js'
 import AddressAutocomplete from './AddressAutocomplete.jsx'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -26,6 +27,8 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, formDat
     if (!form.name.trim())    e.name    = t(lang, 'err_name')
     if (!form.email.trim())   e.email   = t(lang, 'err_email_required')
     else if (!EMAIL_RE.test(form.email)) e.email = t(lang, 'err_email_invalid')
+    if (!form.phone.trim())   e.phone   = t(lang, 'err_phone_required')
+    else if (!normalizePhone(form.phone)) e.phone = t(lang, 'err_phone_invalid')
     if (!form.subject.trim()) e.subject = t(lang, 'err_subject')
     if (form.locationMode === 'in_person' && !form.meetingLocation.trim())
       e.meetingLocation = t(lang, 'err_address')
@@ -125,6 +128,30 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, formDat
             />
           </div>
           {errors.email && <p className="text-xs text-red-500 mt-1">{errors.email}</p>}
+        </div>
+
+        {/* Phone */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t(lang, 'phone_label')}</label>
+          <div className="relative">
+            <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+            <input
+              type="tel"
+              dir="ltr"
+              inputMode="tel"
+              autoComplete="tel"
+              value={form.phone}
+              onChange={handleChange('phone')}
+              placeholder={t(lang, 'phone_placeholder')}
+              disabled={submitting}
+              className={`w-full pl-9 pr-4 py-2.5 rounded-xl border text-sm transition
+                focus:outline-none focus:ring-2 focus:ring-brand-300
+                ${errors.phone ? 'border-red-300 bg-red-50 focus:ring-red-200' : 'border-gray-200 focus:border-brand-400'}`}
+            />
+          </div>
+          {errors.phone
+            ? <p className="text-xs text-red-500 mt-1">{errors.phone}</p>
+            : <p className="text-xs text-gray-400 mt-1">{t(lang, 'phone_hint')}</p>}
         </div>
 
         {/* Subject */}

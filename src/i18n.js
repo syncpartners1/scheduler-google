@@ -67,6 +67,11 @@ const strings = {
     err_email_required: 'Email is required',
     err_email_invalid:  'Enter a valid email address',
     err_subject:        'Meeting subject is required',
+    phone_label:        'Phone number',
+    phone_placeholder:  '050-123-4567 or +1 212 555 0100',
+    phone_hint:         'International numbers start with +. Without +, we assume Israel.',
+    err_phone_required: 'Phone number is required',
+    err_phone_invalid:  'Enter a valid phone number',
     err_address:        'Meeting address is required for in-person meetings',
 
     // ── Confirmation ─────────────────────────────────────────────────────────
@@ -153,6 +158,11 @@ const strings = {
     err_email_required: 'אימייל הוא שדה חובה',
     err_email_invalid:  'הזן כתובת אימייל תקינה',
     err_subject:        'נושא הפגישה הוא שדה חובה',
+    phone_label:        'מספר טלפון',
+    phone_placeholder:  '050-123-4567 או +1 212 555 0100',
+    phone_hint:         'מספר בינלאומי מתחיל ב-+. בלי +, נניח שהמספר ישראלי.',
+    err_phone_required: 'מספר טלפון הוא שדה חובה',
+    err_phone_invalid:  'הזן מספר טלפון תקין',
     err_address:        'כתובת הפגישה נדרשת לפגישות פנים אל פנים',
 
     // ── Confirmation ─────────────────────────────────────────────────────────
