@@ -7,6 +7,21 @@ const CLICKUP_LEAD_LIST_ID = process.env.CLICKUP_LEAD_LIST_ID || ''
 const ADMIN_TELEGRAM_ID = process.env.ADMIN_TELEGRAM_ID || ''
 const TYPE_LABEL = { virtual: 'פגישה וירטואלית', call: 'שיחת היכרות' }
 const leadDoc = (id) => db.collection('telegramLeads').doc(id)
+const QUESTIONNAIRE_URL = 'https://changenavigator.web.app/qualify-form'
+
+// One follow-up message per lead, sent right after the confirmation. handleContact only
+// reaches here once per leadId (the telegramLeads claim), so this cannot send twice.
+// It never throws: a failed follow-up must not change the lead's recorded status.
+async function sendQuestionnaireLink(ctx, ref) {
+  try {
+    await ctx.reply('כדי להתקדם מהר, אפשר למלא עכשיו את שאלון המוכנות:', {
+      reply_markup: { inline_keyboard: [[{ text: 'למילוי שאלון המוכנות', url: QUESTIONNAIRE_URL }]] },
+    })
+    await ref.update({ questionnaireLinkSent: true }).catch((err) => console.error('[lead/questionnaire-flag]', err))
+  } catch (err) {
+    console.error('[lead/questionnaire-link]', err)
+  }
+}
 
 function cleanPhone(contact) {
   const number = String(contact.phone_number || '').replace(/[\s()-]/g, '')
@@ -120,10 +135,12 @@ export function registerLeadHandlers(bot) {
         ? 'הפנייה נרשמה ונשלחה לעדי. עדיין לא נקבעה פגישה.'
         : 'הפנייה נרשמה. לא הצלחנו לשלוח עליה התראה לעדי כרגע; היא שמורה לבדיקה. עדיין לא נקבעה פגישה.',
         { reply_markup: { remove_keyboard: true } })
+      await sendQuestionnaireLink(ctx, ref)
     } catch (err) {
       console.error('[lead/clickup]', err)
       await ref.update({ status: 'needs_review', updatedAt: new Date() }).catch(() => {})
       await ctx.reply('לא ניתן לאשר שהפנייה התקבלה. לא נשלח אותה שוב אוטומטית כדי למנוע כפילות. אפשר לפנות לעדי ישירות.', { reply_markup: { remove_keyboard: true } })
+      await sendQuestionnaireLink(ctx, ref)
     }
     return true
   }
