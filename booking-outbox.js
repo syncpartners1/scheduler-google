@@ -16,6 +16,8 @@ export function payloadFor(input, result) {
     end: new Date(result.endISO).toISOString(),
     meet_link: result.meetLink || '',
     location: input.location || '',
+    // Only sent when there is one, so old bookings keep the payload they had.
+    ...(input.phone ? { phone: input.phone } : {}),
   }
 }
 
@@ -34,6 +36,7 @@ export function makeBookingOutbox({ db, fetch, gasUrl, receiverUrl, bridgeSecret
         startISO: input.startISO, duration: Number(input.duration), userTz: input.userTz || 'UTC',
         meetingTypeId: input.meetingTypeId || '', meetingTypeLabel: input.meetingTypeLabel || '',
         locationMode: input.locationMode || 'virtual', location: input.location || '',
+        ...(input.phone ? { phone: input.phone } : {}),
       }
       if (snap.exists) {
         const row = snap.data()

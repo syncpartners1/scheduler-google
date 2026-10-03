@@ -93,3 +93,22 @@ test('browser preserves intent across retries and reloads',()=>{
  assert(source.includes('previous?.identity === identity'))
  assert(!source.includes('`${email}-${selectedSlot.start}-${Date.now()}`'))
 })
+
+test('payload carries the phone only when there is one',()=>{
+ assert.equal(payloadFor({...input,phone:'+972501234567'},result).phone,'+972501234567')
+ assert.equal('phone' in payloadFor(input,result),false)
+})
+test('phone is part of the booking identity, and old intents without it still match',async()=>{
+ const {out}=fixture();await out.prepare(input)
+ await out.prepare(input)
+ await assert.rejects(out.prepare({...input,phone:'+972501234567'}))
+ const b=fixture();await b.out.prepare({...input,phone:'+972501234567'})
+ await b.out.prepare({...input,phone:'+972501234567'})
+ await assert.rejects(b.out.prepare({...input,phone:'+972509999999'}))
+})
+test('the confirmed notification sent to AICOACH includes the phone',async()=>{
+ let body
+ const {out}=fixture(async(url,opts)=>{body=JSON.parse(opts.body);return {ok:true,json:async()=>({ok:true,stored:true})}})
+ const a=await out.prepare({...input,phone:'+972501234567'});await out.confirm(a,result);assert(await out.deliver(a.ref))
+ assert.equal(body.phone,'+972501234567')
+})
