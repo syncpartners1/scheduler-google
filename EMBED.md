@@ -2,7 +2,7 @@
 
 ## Booking Page URL
 
-**Direct link:** `https://abn-sch.up.railway.app`
+**Direct link:** `https://meet.changenavigator.co.il`
 
 Use this URL anywhere you want to send people to book a meeting.
 
@@ -28,13 +28,13 @@ Use this URL anywhere you want to send people to book a meeting.
 
 ```
 # Hebrew, intro meeting (website default)
-https://abn-sch.up.railway.app?lang=he&type=intro_30
+https://meet.changenavigator.co.il?lang=he&type=intro_30
 
 # English, coaching session
-https://abn-sch.up.railway.app?type=coaching_60
+https://meet.changenavigator.co.il?type=coaching_60
 
 # Hebrew, embedded in iframe
-https://abn-sch.up.railway.app?lang=he&embed=true
+https://meet.changenavigator.co.il?lang=he&embed=true
 ```
 
 ---
@@ -52,7 +52,7 @@ Click **Enter Code** and paste:
 
 ```html
 <iframe
-  src="https://abn-sch.up.railway.app?embed=true&lang=he"
+  src="https://meet.changenavigator.co.il?embed=true&lang=he"
   width="100%"
   height="820"
   frameborder="0"
@@ -70,7 +70,7 @@ Change `lang=he` to `lang=en` for English, or remove the parameter for the toggl
 In Wix, add a Button element and set its link to:
 
 ```
-https://abn-sch.up.railway.app?lang=he&type=intro_30
+https://meet.changenavigator.co.il?lang=he&type=intro_30
 ```
 
 This opens the booking page in a new tab (or the same tab) directly pre-set to the Introduction meeting.
@@ -82,10 +82,10 @@ This opens the booking page in a new tab (or the same tab) directly pre-set to t
 Access the booking admin panel at:
 
 ```
-https://abn-sch.up.railway.app/admin-bookings
+https://auth.changenavigator.co.il/admin-bookings
 ```
 
-Log in with the `API_KEY` environment variable value set in Railway.
+Log in with the `API_KEY` value (Secret Manager secret `SCHEDULER_GOOGLE_API_KEY`).
 
 **Admin capabilities:**
 - View all upcoming bookings
@@ -129,7 +129,7 @@ Each booking object should include:
 
 ---
 
-## Environment Variables (Railway)
+## Environment Variables (Cloud Run)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
@@ -137,10 +137,10 @@ Each booking object should include:
 | `API_KEY` | ✅ | Secret for `/api/*` and admin dashboard |
 | `VITE_GAS_URL` | ✅ | Same URL, used at build time for the React app |
 | `VITE_OWNER_NAME` | ✅ | Displayed in the booking page header |
-| `VITE_OWNER_PHOTO_URL` | optional | URL or path to the owner's photo (default: `/adi.jpg`) |
-| `PORT` | auto | Set automatically by Railway |
+| `VITE_OWNER_PHOTO_URL` | optional | URL or path to the owner's photo (default: `/adi.png`) |
+| `PORT` | auto | Set automatically by Cloud Run |
 
-> To use `/adi.jpg` as the photo, place the image file in the `public/` folder
+> To use `/adi.png` as the photo, place the image file in the `public/` folder
 > before running `npm run build`.
 
 ---
@@ -149,8 +149,8 @@ Each booking object should include:
 
 The booking page header displays the owner's photo. To use the provided photo:
 
-1. Save the image file as `public/adi.jpg` in the project root
-2. Run `npm run build` — Vite will copy it to `dist/adi.jpg`
-3. Deploy to Railway — the photo will be served at `/adi.jpg`
+1. Save the image file as `public/adi.png` in the project root
+2. Run `npm run build` — Vite will copy it to `dist/adi.png`
+3. Deploy (push to `main`, the GitHub workflow deploys to Cloud Run) — the photo will be served at `/adi.png`
 
 Alternatively, set `VITE_OWNER_PHOTO_URL` to any public image URL (e.g. hosted on Wix Media).
