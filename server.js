@@ -24,6 +24,7 @@ import { registerAuthRoutes } from './auth.js'
 import { windowForDate, isCoachingWindow } from './availability.js'
 import { db } from './storage.js'
 import { makeBookingOutbox } from './booking-outbox.js'
+import { makeGasFetch } from './gas-auth.js'
 import { normalizePhone } from './phone.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -37,7 +38,11 @@ const API_KEY   = process.env.API_KEY || ''
 const TELEGRAM_WEBHOOK_PATH = process.env.TELEGRAM_WEBHOOK_PATH || ''
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || ''
 
-const bookingOutbox = makeBookingOutbox({db,fetch,gasUrl:GAS_URL,
+const GAS_SHARED_SECRET = process.env.GAS_SHARED_SECRET || ''
+
+const gasFetch = makeGasFetch(GAS_URL, GAS_SHARED_SECRET, fetch)
+
+const bookingOutbox = makeBookingOutbox({db,fetch:gasFetch,gasUrl:GAS_URL,
   receiverUrl:process.env.AICOACH_URL || '',bridgeSecret:process.env.AICOACH_BRIDGE_SECRET || ''})
 
 // Existing calendar success is returned even if secondary notification write or
@@ -209,7 +214,7 @@ app.get('/api/slots', requireApiKey, async (req, res) => {
 
   try {
     const params   = new URLSearchParams({ action: 'getBusySlots', date, tz, duration })
-    const gasRes   = await fetch(`${GAS_URL}?${params}`)
+    const gasRes   = await gasFetch(`${GAS_URL}?${params}`)
     const data     = await gasRes.json()
     if (data.error) return res.status(502).json({ ok: false, error: data.error })
     const slots    = generateAvailableSlots(date, data.busySlots || [], tz, Number(duration))
@@ -260,7 +265,7 @@ app.post('/api/book', requireApiKey, async (req, res) => {
     return res.status(503).json({ok:false,error:'Booking preparation unavailable; no calendar request sent'})
   }
   try {
-    const gasRes = await fetch(GAS_URL, {
+    const gasRes = await gasFetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'createEvent', ...intent.input, requestId:intent.gasRequestId }),
@@ -296,7 +301,7 @@ app.post('/api/cancel', requireApiKey, async (req, res) => {
   }
 
   try {
-    const gasRes = await fetch(GAS_URL, {
+    const gasRes = await gasFetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'cancelEvent', eventId, reason: reason || '' }),
@@ -331,7 +336,7 @@ app.get('/api/bookings', requireApiKey, async (req, res) => {
 
   try {
     const params  = new URLSearchParams({ action: 'getBookings', email })
-    const gasRes  = await fetch(`${GAS_URL}?${params}`)
+    const gasRes  = await gasFetch(`${GAS_URL}?${params}`)
     const data    = await gasRes.json()
     if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Could not fetch bookings' })
     res.json(data)
@@ -376,7 +381,7 @@ app.get('/api/public/slots', async (req, res) => {
   if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
   try {
     const params  = new URLSearchParams({ action: 'getBusySlots', date, tz, duration })
-    const gasRes  = await fetch(`${GAS_URL}?${params}`, { signal: AbortSignal.timeout(15000) })
+    const gasRes  = await gasFetch(`${GAS_URL}?${params}`, { signal: AbortSignal.timeout(15000) })
     const rawText = await gasRes.text()
 
     // GAS sometimes returns HTML (auth/quota page) instead of JSON.
@@ -427,7 +432,7 @@ app.post('/api/public/book', async (req, res) => {
     return res.status(503).json({ok:false,error:'Booking preparation unavailable; no calendar request sent'})
   }
   try {
-    const gasRes = await fetch(GAS_URL, {
+    const gasRes = await gasFetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({
@@ -470,7 +475,7 @@ app.get('/api/admin/bookings', requireApiKey, async (req, res) => {
   if (!GAS_URL) return res.status(503).json({ ok: false, error: 'GAS_URL not configured' })
   try {
     const params = new URLSearchParams({ action: 'getAllBookings' })
-    const gasRes = await fetch(`${GAS_URL}?${params}`)
+    const gasRes = await gasFetch(`${GAS_URL}?${params}`)
     const data   = await gasRes.json()
     if (!data.ok) return res.status(502).json({ ok: false, error: data.error || 'Could not fetch bookings' })
     res.json(data)
@@ -501,7 +506,7 @@ app.post('/api/admin/reschedule', requireApiKey, async (req, res) => {
 
   try {
     // Step 1: cancel existing event
-    const cancelRes = await fetch(GAS_URL, {
+    const cancelRes = await gasFetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ action: 'cancelEvent', eventId, reason: 'Rescheduled by admin' }),
@@ -512,7 +517,7 @@ app.post('/api/admin/reschedule', requireApiKey, async (req, res) => {
 
     // Step 2: create new event
     const requestId = `${email}-${newStartISO}-${Date.now()}`
-    const createRes = await fetch(GAS_URL, {
+    const createRes = await gasFetch(GAS_URL, {
       method:  'POST',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({

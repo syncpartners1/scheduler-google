@@ -145,10 +145,38 @@ function triggerAuth() {
   Logger.log('Auth OK — calendar name: ' + cal.getName())
 }
 
+/**
+ * Shared secret for the Apps Script web app, kept in Script properties (Project Settings), never in code.
+ * While the property is not set the gate is off (rollout order); once set, calls without it are rejected.
+ */
+function sharedSecret() {
+  return PropertiesService.getScriptProperties().getProperty('GAS_SHARED_SECRET') || ''
+}
+
+/** Returns null when allowed, or an error object. Constant-time compare; never logs or echoes the secret. */
+function checkSharedSecret(action, params, body) {
+  const expected = sharedSecret()
+  if (!expected) return null
+  if (action === 'diagnostics') return null
+  const given = String((body && body.secret) || (params && params.secret) || '')
+  let diff = given.length ^ expected.length
+  for (let i = 0; i < expected.length; i++) {
+    diff |= (given.charCodeAt(i) || 0) ^ expected.charCodeAt(i)
+  }
+  return diff === 0 ? null : { ok: false, error: 'Unauthorized', code: 'ERR_UNAUTHORIZED' }
+}
+
 function handleRequest(e, body) {
   const params = (e && e.parameter) || {}
   const action = params.action || (body && body.action)
   const ts     = new Date().toISOString()
+
+  // Shared-secret gate: every action except the public health check needs the secret.
+  const denied = checkSharedSecret(action, params, body)
+  if (denied) {
+    Logger.log(JSON.stringify({ ts, action, ok: false, code: denied.code }))
+    return jsonResponse(denied, 401)
+  }
 
   try {
     let result
@@ -185,6 +213,7 @@ function handleRequest(e, body) {
  */
 function getDiagnostics() {
   return {
+    authEnforced: !!sharedSecret(),
     notificationContractVersion: 1,
     ok:          true,
     ts:          new Date().toISOString(),

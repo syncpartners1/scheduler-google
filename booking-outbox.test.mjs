@@ -77,7 +77,7 @@ test('both new booking routes prepare before GAS and preserve calendar success',
  const source=fs.readFileSync(new URL('./server.js',import.meta.url),'utf8')
  for(const route of ["app.post('/api/book'","app.post('/api/public/book'"]){
  const start=source.indexOf(route),block=source.slice(start,source.indexOf('/**',start))
- assert(block.indexOf('bookingOutbox.prepare')<block.indexOf('fetch(GAS_URL'))
+ assert(block.indexOf('bookingOutbox.prepare')<block.indexOf('gasFetch(GAS_URL'))
  assert(block.includes('await recordConfirmedBooking(intent,data)'));assert(block.includes('res.json(data)'))
  }
 })
