@@ -92,3 +92,20 @@ test('workflow passes the secret to Cloud Run and the Docker runtime copies gas-
   assert.ok(fs.readFileSync(new URL('./.github/workflows/deploy-gcp.yml', import.meta.url), 'utf8').includes('GAS_SHARED_SECRET=SCHEDULER_GOOGLE_GAS_SHARED_SECRET:latest'))
   assert.ok(fs.readFileSync(new URL('./Dockerfile', import.meta.url), 'utf8').includes('gas-auth.js'))
 })
+
+test('Node: a trailing newline or spaces on the secret are ignored, the secret itself is unchanged', async () => {
+  const calls = []
+  const gasFetch = makeGasFetch(GAS, 'abc123\n', async (url, init) => { calls.push({ url, init }) })
+  await gasFetch(`${GAS}?action=getBusySlots`)
+  assert.equal(calls[0].url, `${GAS}?action=getBusySlots&secret=abc123`)
+  const post = makeGasFetch(GAS, '  abc123 \r\n', async (url, init) => { calls.push({ url, init }) })
+  await post(GAS, { method: 'POST', body: '{"action":"createEvent"}' })
+  assert.equal(JSON.parse(calls[1].init.body).secret, 'abc123')
+  const blank = makeGasFetch(GAS, '\n', async (url, init) => { calls.push({ url, init }) })
+  await blank(`${GAS}?action=x`)
+  assert.equal(calls[2].url, `${GAS}?action=x`)
+})
+
+test('server.js trims GAS_SHARED_SECRET when reading it', () => {
+  assert.ok(fs.readFileSync(new URL('./server.js', import.meta.url), 'utf8').includes("(process.env.GAS_SHARED_SECRET || '').trim()"))
+})
