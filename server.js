@@ -38,7 +38,7 @@ const API_KEY   = process.env.API_KEY || ''
 const TELEGRAM_WEBHOOK_PATH = process.env.TELEGRAM_WEBHOOK_PATH || ''
 const TELEGRAM_WEBHOOK_SECRET = process.env.TELEGRAM_WEBHOOK_SECRET || ''
 
-const GAS_SHARED_SECRET = process.env.GAS_SHARED_SECRET || ''
+const GAS_SHARED_SECRET = (process.env.GAS_SHARED_SECRET || '').trim()
 
 const gasFetch = makeGasFetch(GAS_URL, GAS_SHARED_SECRET, fetch)
 
