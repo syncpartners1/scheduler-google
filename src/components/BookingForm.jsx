@@ -4,6 +4,7 @@ import { formatDateTimeInTz } from '../utils/timeSlots.js'
 import { OWNER_TZ } from '../config.js'
 import { t } from '../i18n.js'
 import { normalizePhone } from '../../phone.js'
+import { isDiagnosticClinicSlot, CLINIC_ADDRESS } from '../../booking-format.js'
 import AddressAutocomplete from './AddressAutocomplete.jsx'
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
@@ -22,6 +23,24 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, formDat
     { id: 'in_person', label: t(lang, 'in_person'), icon: MapPin, desc: t(lang, 'fmt_inperson_desc') },
   ]
 
+  // The dedicated diagnostic route (?type=diagnostic_60) offers Google Meet,
+  // or a clinic meeting when the selected slot is inside the Friday
+  // 09:00-12:00 (Asia/Jerusalem) clinic window — never hybrid, and the clinic
+  // address is fixed, not client-supplied. server.js validates the same rule.
+  const isDiagnostic = meetingType.id === 'diagnostic_60'
+  const clinicAvailable = isDiagnostic && isDiagnosticClinicSlot(selectedSlot?.start, meetingType.duration)
+  const MODES = isDiagnostic
+    ? [
+        { id: 'virtual',   label: t(lang, 'virtual'), icon: Video,  desc: t(lang, 'fmt_virtual_desc') },
+        ...(clinicAvailable
+          ? [{ id: 'in_person', label: t(lang, 'clinic'), icon: MapPin, desc: t(lang, 'fmt_clinic_desc') }]
+          : []),
+      ]
+    : LOCATION_MODES
+  // Coerce a stale choice (e.g. clinic picked, then the slot changed) so the
+  // form never submits a format the diagnostic route does not allow.
+  const activeMode = MODES.some(m => m.id === form.locationMode) ? form.locationMode : 'virtual'
+
   const validate = () => {
     const e = {}
     if (!form.name.trim())    e.name    = t(lang, 'err_name')
@@ -29,8 +48,10 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, formDat
     else if (!EMAIL_RE.test(form.email)) e.email = t(lang, 'err_email_invalid')
     if (!form.phone.trim())   e.phone   = t(lang, 'err_phone_required')
     else if (!normalizePhone(form.phone)) e.phone = t(lang, 'err_phone_invalid')
-    if (!form.subject.trim()) e.subject = t(lang, 'err_subject')
-    if (form.locationMode === 'in_person' && !form.meetingLocation.trim())
+    if (!isDiagnostic && !form.subject.trim()) e.subject = t(lang, 'err_subject')
+    // Diagnostic clinic bookings use the fixed clinic address, so only public
+    // types require an entered address.
+    if (!isDiagnostic && form.locationMode === 'in_person' && !form.meetingLocation.trim())
       e.meetingLocation = t(lang, 'err_address')
     setErrors(e)
     return Object.keys(e).length === 0
@@ -52,7 +73,17 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, formDat
     setSubmitting(true)
     setApiError(null)
     try {
-      await onSubmit(form)
+      if (isDiagnostic) {
+        // Subject is fixed on this route; the lead may add a free-text focus
+        // area, which rides along in the existing subject field.
+        const fixedSubject = t(lang, 'subject_fixed_diagnostic')
+        const focus = (form.focus || '').trim()
+        await onSubmit({ ...form,
+          subject: focus ? `${fixedSubject} - ${focus}` : fixedSubject,
+          locationMode: activeMode, meetingLocation: '' })
+      } else {
+        await onSubmit(form)
+      }
     } catch (err) {
       setApiError(err.message || 'Something went wrong. Please try again.')
     } finally {
@@ -154,7 +185,9 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, formDat
             : <p className="text-xs text-gray-400 mt-1">{t(lang, 'phone_hint')}</p>}
         </div>
 
-        {/* Subject */}
+        {/* Subject: free text on public types; fixed on the diagnostic route,
+            where the lead may add an optional focus area instead */}
+        {!isDiagnostic && (
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">{t(lang, 'meeting_subject')}</label>
           <div className="relative">
@@ -172,13 +205,36 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, formDat
           </div>
           {errors.subject && <p className="text-xs text-red-500 mt-1">{errors.subject}</p>}
         </div>
+        )}
+        {isDiagnostic && (
+        <>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t(lang, 'meeting_subject')}</label>
+          <div className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-700">
+            {t(lang, 'subject_fixed_diagnostic')}
+          </div>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">{t(lang, 'focus_label')}</label>
+          <input
+            type="text"
+            value={form.focus || ''}
+            onChange={handleChange('focus')}
+            disabled={submitting}
+            className="w-full px-4 py-2.5 rounded-xl border text-sm transition
+              focus:outline-none focus:ring-2 focus:ring-brand-300 border-gray-200 focus:border-brand-400"
+          />
+          <p className="text-xs text-gray-400 mt-1">{t(lang, 'focus_hint')}</p>
+        </div>
+        </>
+        )}
 
         {/* Location mode */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">{t(lang, 'meeting_format')}</label>
-          <div className="grid grid-cols-3 gap-2">
-            {LOCATION_MODES.map(({ id, label, icon: Icon, desc }) => {
-              const active = form.locationMode === id
+          <div className={`grid gap-2 ${MODES.length === 3 ? 'grid-cols-3' : MODES.length === 2 ? 'grid-cols-2' : 'grid-cols-1'}`}>
+            {MODES.map(({ id, label, icon: Icon, desc }) => {
+              const active = activeMode === id
               return (
                 <button
                   key={id}
@@ -202,8 +258,17 @@ export default function BookingForm({ selectedSlot, meetingType, userTz, formDat
           </div>
         </div>
 
-        {/* Address — shown for in-person and hybrid */}
-        {(form.locationMode === 'in_person' || form.locationMode === 'hybrid') && (
+        {/* Clinic bookings on the diagnostic route meet at the clinic; the
+            address is fixed, not entered by the lead. */}
+        {isDiagnostic && activeMode === 'in_person' && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">{t(lang, 'meeting_address')}</label>
+            <p className="w-full px-4 py-2.5 rounded-xl border border-gray-200 bg-gray-50 text-sm text-gray-700">{CLINIC_ADDRESS}</p>
+          </div>
+        )}
+
+        {/* Address — shown for in-person and hybrid on public types */}
+        {!isDiagnostic && (form.locationMode === 'in_person' || form.locationMode === 'hybrid') && (
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">{t(lang, 'meeting_address')}</label>
             <AddressAutocomplete

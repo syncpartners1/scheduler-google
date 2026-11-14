@@ -43,16 +43,38 @@ export default function TimeSlotPicker({
       </div>
       <p className="text-sm text-gray-400 mb-5 ml-8">{dateLabel}</p>
 
-      {/* Meeting type selector */}
+      {/* Meeting type selector. The diagnostic meeting type is shared through
+          a dedicated coach-sent ?type=diagnostic_60 link; lock the picker to
+          it so that route stays single-purpose. Public types keep the normal
+          switchable picker, and hidden types stay out of it. */}
       <div className="mb-5">
         <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-2">
           {t(lang, 'meeting_type_lbl')}
         </p>
         <div className="space-y-1.5">
-          {MEETING_TYPES.filter(mt => !mt.hidden || mt.id === meetingType.id).map(mt => {
+          {MEETING_TYPES.filter(mt => meetingType.id === 'diagnostic_60' ? mt.id === meetingType.id : !mt.hidden).map(mt => {
             const active = meetingType.id === mt.id
             const label  = t(lang, `mt_${mt.id}_label`)
             const sub    = t(lang, `mt_${mt.id}_sub`)
+            const chip = (
+              <>
+                <span className="font-medium">{label}</span>
+                <span className={`text-xs ${active ? 'text-brand-100' : 'text-gray-400'}`}>
+                  {mt.duration} {lang === 'he' ? 'דק׳' : 'min'} · {sub}
+                </span>
+              </>
+            )
+            if (meetingType.id === 'diagnostic_60') {
+              return (
+                <div
+                  key={mt.id}
+                  aria-current="true"
+                  className="w-full flex items-center justify-between px-4 py-2.5 rounded-xl border text-sm text-left bg-brand-600 text-white border-brand-600 shadow-sm cursor-default"
+                >
+                  {chip}
+                </div>
+              )
+            }
             return (
               <button
                 key={mt.id}
@@ -65,10 +87,7 @@ export default function TimeSlotPicker({
                   }
                 `}
               >
-                <span className="font-medium">{label}</span>
-                <span className={`text-xs ${active ? 'text-brand-100' : 'text-gray-400'}`}>
-                  {mt.duration} {lang === 'he' ? 'דק׳' : 'min'} · {sub}
-                </span>
+                {chip}
               </button>
             )
           })}

@@ -30,5 +30,8 @@ test('diagnostic meeting type is 60 minutes, hidden from the public picker, labe
   const i18n = read('src/i18n.js')
   assert.match(i18n, /mt_diagnostic_60_label:\s+'פגישת איבחון'/)
   assert.match(i18n, /mt_diagnostic_60_label:\s+'Diagnostic meeting'/)
-  assert.match(read('src/components/TimeSlotPicker.jsx'), /filter\(mt => !mt\.hidden \|\| mt\.id === meetingType\.id\)/)
+  const picker = read('src/components/TimeSlotPicker.jsx')
+  // Dedicated diagnostic route locks the picker to the linked type; the
+  // public branch still filters hidden types out.
+  assert.match(picker, /meetingType\.id === 'diagnostic_60' \? mt\.id === meetingType\.id : !mt\.hidden/)
 })

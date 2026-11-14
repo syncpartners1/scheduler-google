@@ -22,6 +22,7 @@ import crypto            from 'crypto'
 import { bot }           from './bot.js'
 import { registerAuthRoutes } from './auth.js'
 import { windowForDate, isCoachingWindow } from './availability.js'
+import { effectiveBookingFormat } from './booking-format.js'
 import { db } from './storage.js'
 import { makeBookingOutbox } from './booking-outbox.js'
 import { makeGasFetch } from './gas-auth.js'
@@ -421,6 +422,14 @@ app.post('/api/public/book', async (req, res) => {
     return res.status(400).json({ ok: false, error: 'A valid phone number is required', code: 'ERR_PHONE' })
   }
   req.body.phone = phone
+  // The dedicated diagnostic link (?type=diagnostic_60) offers Google Meet, or
+  // a clinic meeting on Fridays 09:00-12:00 (Asia/Jerusalem) at the clinic
+  // address. Validate the whole interval server-side; reject anything else.
+  const format = effectiveBookingFormat(meetingTypeId, locationMode, location, startISO, duration)
+  if (!format.ok) {
+    return res.status(400).json({ ok: false, error: format.error, code: format.code })
+  }
+  const { locationMode: effectiveLocationMode, location: effectiveLocation } = format
   if (!isCoachingWindow(startISO, duration)) {
     return res.status(400).json({ ok: false, error: 'Outside client coaching hours', code: 'ERR_COACHING_HOURS' })
   }
@@ -441,8 +450,8 @@ app.post('/api/public/book', async (req, res) => {
         userTz:           userTz           || 'UTC',
         meetingTypeId:    meetingTypeId    || '',
         meetingTypeLabel: meetingTypeLabel || '',
-        locationMode:     locationMode     || 'virtual',
-        location:         location         || '',
+        locationMode:     effectiveLocationMode,
+        location:         effectiveLocation,
         requestId:        intent.gasRequestId,
       }),
       signal: AbortSignal.timeout(20000),
