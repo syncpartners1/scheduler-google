@@ -3,7 +3,7 @@ import CalendarPicker     from './components/CalendarPicker.jsx'
 import TimeSlotPicker     from './components/TimeSlotPicker.jsx'
 import BookingForm        from './components/BookingForm.jsx'
 import ConfirmationScreen from './components/ConfirmationScreen.jsx'
-import { GAS_URL, OWNER_NAME, OWNER_PHOTO_URL, DEFAULT_MEETING_TYPE, MEETING_TYPES } from './config.js'
+import { GAS_URL, OWNER_NAME, OWNER_NAME_HE, OWNER_PHOTO_URL, DEFAULT_MEETING_TYPE, MEETING_TYPES } from './config.js'
 import { saveBooking }    from './supabaseClient.js'
 import { readPrefill }    from './prefill.js'
 import { t }              from './i18n.js'
@@ -41,12 +41,16 @@ export default function App() {
   // Lifted form state — preserved when user goes back to change time slot
   const [formData, setFormData] = useState(() => {
     // Optional ?name=&email=&subject= pre-fill (editable) for coach-opened links.
+    // On the diagnostic route the subject is fixed, so a pre-filled subject
+    // seeds the optional focus area instead.
     const pre = readPrefill(window.location.search)
+    const isDiagnostic = detectMeetingType().id === 'diagnostic_60'
     return {
       name:            pre.name,
       email:           pre.email,
       phone:           '',
       subject:         pre.subject,
+      focus:           isDiagnostic ? pre.subject : '',
       locationMode:    detectMeetingType().defaultMode,
       meetingLocation: '',
     }
@@ -192,7 +196,7 @@ export default function App() {
   return (
     <div
       dir={isRTL ? 'rtl' : 'ltr'}
-      className={`min-h-screen bg-gradient-to-br from-brand-50 to-blue-50 ${IS_EMBED ? 'p-2' : 'p-4'}`}
+      className={`min-h-screen bg-gradient-to-br from-brand-50 to-brand-100 ${IS_EMBED ? 'p-2' : 'p-4'}`}
     >
       <div className={`mx-auto ${IS_EMBED ? 'max-w-full' : 'max-w-xl'}`}>
 
@@ -208,6 +212,12 @@ export default function App() {
               {t(lang, 'switch_lang')}
             </button>
 
+            {/* Brand wordmark */}
+            <div className="inline-flex items-center justify-center rounded-xl px-4 py-2.5 mb-4"
+                 style={{ backgroundColor: '#032b7d' }}>
+              <img src="/cn-wordmark-white.svg" alt="Change Navigator" className="h-7 w-auto" />
+            </div>
+            <br />
             {/* Owner photo */}
             <div className="inline-block mb-3">
               <img
@@ -219,7 +229,7 @@ export default function App() {
             </div>
 
             <h1 className="text-2xl font-bold text-gray-900">{t(lang, 'book_a_meeting')}</h1>
-            <p className="text-gray-500 mt-1 text-sm">{t(lang, 'with_owner')} {OWNER_NAME}</p>
+            <p className="text-gray-500 mt-1 text-sm">{t(lang, 'with_owner')} {lang === 'he' ? OWNER_NAME_HE : OWNER_NAME}</p>
           </header>
         )}
 

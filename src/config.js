@@ -19,6 +19,7 @@ export const GAS_URL =
 
 // ── Owner / Calendar settings ────────────────────────────────────────────────
 export const OWNER_NAME      = import.meta.env.VITE_OWNER_NAME      || 'Adi Ben-Nesher'
+export const OWNER_NAME_HE   = import.meta.env.VITE_OWNER_NAME_HE   || 'עדי בן נשר'
 export const OWNER_PHOTO_URL = import.meta.env.VITE_OWNER_PHOTO_URL || '/adi.png'
 export const OWNER_TZ        = 'Asia/Jerusalem'  // owner's timezone
 

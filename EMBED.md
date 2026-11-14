@@ -24,6 +24,20 @@ Use this URL anywhere you want to send people to book a meeting.
 | `general_60` | 60 min General |
 | `coaching_60` | 60 min Coaching / Advisory |
 
+**Dedicated diagnostic route:** the link below (shared with leads, e.g. via
+WhatsApp) locks the type picker to the diagnostic meeting — no other meeting
+type can be chosen on that route. The lead chooses Google Meet (always), or a
+clinic meeting when the selected slot is inside the Friday 09:00-12:00
+(Asia/Jerusalem) clinic window, ending by 12:00. Hybrid is never offered, and
+clinic bookings always meet at the clinic address — the server validates the
+whole interval and rejects any other format or time:
+
+```
+https://meet.changenavigator.co.il?lang=he&type=diagnostic_60
+```
+
+Public `?type=` links keep the switchable picker.
+
 ### Example Links
 
 ```
